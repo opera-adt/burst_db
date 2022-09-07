@@ -8,9 +8,10 @@ PATH_AUGMENTED_BURST_MAP = (f'{path_home}/Documents/DATA/Sensor/Sentinel-1/'
                             'S1_burstid_20220530/IW/sqlite/'
                             'burst_map_IW_000001_375887.OPERA-JPL.20220818_113416.sqlite3')
 
-PATH_CSV_OUT = f'{path_home}/opera-adt/Burst_Coverage_Metadata/data/CSV_OUT_ALL_BURSTS.csv'
-PATH_JSON_OUT = f'{path_home}/opera-adt/Burst_Coverage_Metadata/data/CSV_OUT_ALL_BURSTS.json'
-PATH_SQLITE_OUT = f'{path_home}/opera-adt/Burst_Coverage_Metadata/data/CSV_OUT_ALL_BURSTS.sqlite'
+PATH_TOP=os.path.dirname(__file__)
+PATH_CSV_OUT = f'{PATH_TOP}/data/CSV_OUT_ALL_BURSTS.csv'
+PATH_JSON_OUT = f'{PATH_TOP}/data/CSV_OUT_ALL_BURSTS.json'
+PATH_SQLITE_OUT = f'{PATH_TOP}/data/CSV_OUT_ALL_BURSTS.sqlite'
 
 conn=sqlite3.connect(PATH_AUGMENTED_BURST_MAP)
 curs=conn.cursor()

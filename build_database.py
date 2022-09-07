@@ -222,8 +222,6 @@ def generate_shp_out(path_shp_in: str, path_shp_out: str,
     datasrc_out = None
 
 
-
-
 if __name__=='__main__':
     # Burst ID, projection, xmin, ymin, xmax, ymax
     STR_TIMESTAMP = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
