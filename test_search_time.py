@@ -261,7 +261,7 @@ if __name__=='__main__':
         t1 = time.time()
 
         list_time[i_repeat] = t1 - t0
-        print(list_time[i_repeat])
+        print(f'{list_time[i_repeat]} sec.        ',end='\r')
 
     print('\nTest complete:')
     print(f'min   : {list_time.min():0.6f} sec. '
