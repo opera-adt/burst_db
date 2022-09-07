@@ -228,15 +228,12 @@ if __name__=='__main__':
     STR_TIMESTAMP = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     PATH_TOP = os.path.dirname(__file__)
 
-    SHP_IN = f'{PATH_TOP}/output/Burstmap_Lower_US.shp'
+    SHP_IN = f'{PATH_TOP}/data/Burstmap_Lower_US.shp'
     SHP_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata.shp'\
               .replace('.shp', f'.{STR_TIMESTAMP}.shp')
-    CSV_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata.csv'\
-              .replace('.csv', f'.{STR_TIMESTAMP}.shp')
-    JSON_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata.json'\
-               .replace('.json', f'.{STR_TIMESTAMP}.json')
-    SQLITE_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata.sqlite3'\
-                 .replace('.shp', f'.{STR_TIMESTAMP}.shp')
+    CSV_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.csv'
+    JSON_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.json'
+    SQLITE_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.sqlite3'
 
     # epsg=4326
     # epsg=102003 #USA Contiguous Albers Equal Area Conic - Causes an error when using it
@@ -305,5 +302,7 @@ if __name__=='__main__':
                             f'{list_extent[i_burst][2]}, {list_extent[i_burst][3]})'
 
             cur.execute(str_sql_command)
-
+        cur.execute('CREATE INDEX index_burst ON burst (burst_id)')
         conn.commit()
+
+        
