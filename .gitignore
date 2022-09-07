@@ -159,4 +159,4 @@ launch.json
 .DS_Store
 
 #Output of the program
-output/
+data/
