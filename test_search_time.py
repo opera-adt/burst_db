@@ -8,18 +8,18 @@ A script to test the search performance of each data format and loading scmheme
 import argparse
 import csv
 import json
-import os
 import random
 import time
 
-import numpy as np
 import sqlite3
+import numpy as np
 
 
 
 def populate_bursts_to_search(path_data:str, num_query:int):
     '''
-    Populate the list of burst to search from the database (CSV, JSON, sqlite3) based on random selection.
+    Randomly select the burst IDs. Return the selections as list
+    Supported file format: CSV, JSON, sqlite3.
 
     Parameters:
     -----------
@@ -31,7 +31,7 @@ def populate_bursts_to_search(path_data:str, num_query:int):
 
     Return:
     -------
-    list_burst_id_search: int
+    list_burst_id_search: list
         List of the burst ID to query
     '''
 
@@ -105,11 +105,10 @@ def query_burst_csv(list_burst_id:list, path_table:str):
     -----------
     list_burst_id: list
         List of burst IDs to query
-    
+
     path_table: str
         Path to the .csv file
-    
-    
+
     '''
     if path_table.lower().endswith('.csv'):
         with open(path_table, 'r', encoding='utf-8') as fin_csv:
@@ -138,7 +137,19 @@ def query_burst_csv(list_burst_id:list, path_table:str):
 
 
 def query_burst_json(list_burst_id:list, path_table:str):
-    '''Placeholder'''
+    '''
+    Find the records from JSON file using burst_id.
+
+    Parameters:
+    -----------
+    list_burst_id: list
+        List of burst IDs to query
+
+    path_table: str
+        Path to the .json file
+
+    '''
+
     if path_table.lower().endswith('.json'):
         with open(path_table, 'r', encoding='utf-8') as fin_json:
             dict_burst = json.load(fin_json)
@@ -152,7 +163,19 @@ def query_burst_json(list_burst_id:list, path_table:str):
 
 
 def query_burst_sqlite(list_burst_id:list, path_table:str):
-    '''Placeholder'''
+    '''
+    Find the records from sqlite database using burst_id.
+
+    Parameters:
+    -----------
+    list_burst_id: list
+        List of burst IDs to query
+
+    path_table: str
+        Path to the .sqlite or .sqlite3 file
+
+    '''
+
     if path_table.lower().endswith('.sqlite'):
         with sqlite3.connect(path_table) as conn_select:
             cur_select = conn_select.cursor()
@@ -165,10 +188,25 @@ def query_burst_sqlite(list_burst_id:list, path_table:str):
 
 
 def query_burst_old_csv(list_burst_id_search:list, path_table:str):
-    '''Find the burst coverage information from the CSV table'''
+    '''
+    Find the records from CSV using burst_id.
+    This function internally converts CSV into list, and search the records inside the list.
+
+    Parameters:
+    -----------
+    list_burst_id: list
+        List of burst IDs to query
+
+    path_table: str
+        Path to the .csv file
+
+    '''
+
     with open(path_table, 'r', encoding='utf-8') as fin_csv:
         lines_csv = fin_csv.readlines()
-        if lines_csv[-1] == '':  # Trim the last white line when necessary
+
+        # Trim the last white line when necessary
+        if lines_csv[-1] == '':
             lines_csv = lines_csv[:-1]
 
     # Convert CSV to dict
@@ -180,7 +218,6 @@ def query_burst_old_csv(list_burst_id_search:list, path_table:str):
         list_burst_id[i_record-1] = token_line[0]
 
     # Perform searching for the burst information
-    print('\n')
     for burst_id_search in list_burst_id_search:
         _ = list_burst_id.index(burst_id_search)
 
@@ -191,12 +228,12 @@ if __name__=='__main__':
     )
 
     parser.add_argument('-n','--num_query',
-                        type=int, default=30, help='Number of queries per round. Default=30')
+                        type=int, default=30, help='Number of queries per round. Default = 30')
     parser.add_argument('-r','--repeat',
-                        type=int, default=20, help='Number of rounds. Default=20')
+                        type=int, default=20, help='Number of rounds. Default = 20')
     parser.add_argument('--old_csv',
                         default=False, action="store_true",
-                        help='option for .csv data to treat the dta file as list')
+                        help='option for .csv data to treat the dta file as list. Default = False')
     parser.add_argument('path_data',
                         type=str, help='Path to the data file (sqlite, sqlite3, csv, json')
 
@@ -212,7 +249,8 @@ if __name__=='__main__':
     print(f'old_csv                    : {args.old_csv}\n')
 
 
-    list_time=np.zeros(args.repeat)
+    # Numpy array to keep record of the processing time for each round
+    list_time = np.zeros(args.repeat)
     for i_repeat in range(args.repeat):
         print(f'Round {i_repeat+1} / {args.repeat} -',end=' ')
         # Populate the data to search
@@ -226,7 +264,11 @@ if __name__=='__main__':
         print(list_time[i_repeat])
 
     print('\nTest complete:')
-    print(f'min   : {list_time.min():0.6f} sec. ({list_time.min()/args.num_query*1000.0:0.6f} ms. per burst)')
-    print(f'max   : {list_time.max():0.6f} sec. ({list_time.max()/args.num_query*1000.0:0.6f} ms. per burst)')
-    print(f'mean  : {list_time.mean():0.6f} sec. ({list_time.mean()/args.num_query*1000.0:0.6f} ms. per burst)')
-    print(f'stdev : {list_time.std():0.6f} sec. ({list_time.std()/args.num_query*1000.0:0.6f} ms. per burst)')
+    print(f'min   : {list_time.min():0.6f} sec. '
+          f'({list_time.min()/args.num_query*1000.0:0.6f} ms. per burst)')
+    print(f'max   : {list_time.max():0.6f} sec. '
+          f'({list_time.max()/args.num_query*1000.0:0.6f} ms. per burst)')
+    print(f'mean  : {list_time.mean():0.6f} sec. '
+          f'({list_time.mean()/args.num_query*1000.0:0.6f} ms. per burst)')
+    print(f'stdev : {list_time.std():0.6f} sec. '
+          f'({list_time.std()/args.num_query*1000.0:0.6f} ms. per burst)')
