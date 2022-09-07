@@ -44,6 +44,7 @@ def get_point_epsg(lat, lon):
         err_str = "'Could not determine EPSG for {0}, {1}'.format(lon, lat))"
         raise ValueError(err_str)
 
+
 def get_list_polygon_wkt(path_shp: str, epsg_out: str) -> dict:
     '''Take the path to the .shp file.
        Returns the list of the polygons in the input as WKT string
@@ -304,5 +305,3 @@ if __name__=='__main__':
             cur.execute(str_sql_command)
         cur.execute('CREATE INDEX index_burst ON burst (burst_id)')
         conn.commit()
-
-        
