@@ -1,4 +1,9 @@
-'Loads ESA burst map in spatialite3; Writeout the attributes for OPERA project to the database'
+'''
+Loads ESA burst map in spatialite3; Writeout the attributes for OPERA project to the database
+
+Input: ESA Burst map (for IW in spatialize3 format)
+Output: Augmented Burst map (ESA burst map + Burst geogrid information for OPERA)
+'''
 
 import datetime
 import json
