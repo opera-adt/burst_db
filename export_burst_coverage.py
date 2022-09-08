@@ -1,7 +1,9 @@
+#!/usr/bin/env python
 '''
 A script to export the burst geogrid from the augmented burst map
 
 '''
+import argparse
 import sqlite3
 import json
 import os
@@ -54,7 +56,7 @@ def export_to_csv(records_out: list, path_csv_out: str):
             fout.write(f'{record[0]}, {record[1]}, {record[2]}, ',
                     f'{record[3]}, {record[4]}, {record[5]}\n' )
         print('\n')
-        
+
 
 def export_to_json(records_out: list, path_json_out: str):
     '''
@@ -105,7 +107,7 @@ def export_to_sqlite(records_out: list, path_sqlite_out: str):
                          'xmin float, ymin float, xmax float, ymax float);')
 
         for i_record, record in enumerate(records_out):
-            print(f'{i_record:,} / {num_record:,}', end='\r')
+            print(f' Processing: {i_record:,} / {num_record:,}      ', end='\r')
             str_sql_command=f'INSERT INTO burst (burst_id ,EPSG, xmin, ymin, xmax, ymax) '\
                             f'VALUES("{record[0]}", {record[1]}, '\
                             f'{record[2]}, {record[3]}, '\
@@ -115,3 +117,28 @@ def export_to_sqlite(records_out: list, path_sqlite_out: str):
         print('\n')
         curs_out.execute('CREATE INDEX index_burst ON burst (burst_id)')
         conn_out.commit()
+
+
+if __name__=='__main__':
+    parser = argparse.ArgumentParser(description='Extracts burst geogrid data from augmented burstmap. Writes out the data into .csv, .json, or .sqlite')
+
+    parser.add_argument('path_augmented_burstmap', type=str,
+                        help='Path to the augmented burst map from which the burst geogrid will be extracted')
+    parser.add_argument('path_databse_out', type=str,
+                        help='Path to the output database file\nSupported format: .csv, .json, .sqlite')
+
+    args=parser.parse_args()
+
+    if not os.path.exists(args.path_augmented_burstmap):
+        raise ValueError(f'Cannot find the augmented burst map: {args.path_augmented_burstmap}')
+
+    records_burst_data = extract_burst_geogrid_data(args.path_augmented_burstmap)
+
+    if parser.path_database_out.endswith('.csv'):
+        export_to_csv(records_burst_data, args.path_database_out)
+    elif parser.path_database_out.endswith('.json'):
+        export_to_json(records_burst_data, args.path_database_out)
+    elif (parser.path_database_out.endswith('.sqlite')) or (args.path_database_out.endswith('.sqlite3')):
+        export_to_sqlite(records_burst_data, args.path_database_out)
+    else:
+        raise ValueError(f'Output file format was not supported: {args.path_database_out}')
