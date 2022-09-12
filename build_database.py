@@ -1,4 +1,7 @@
-'''A code to build the database for S1 burst coverage'''
+'''
+A code to build the database for S1 burst coverage
+The codes in the `__main__` namespace will be deprecated.
+'''
 
 import json
 import os
