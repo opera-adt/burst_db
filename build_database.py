@@ -7,6 +7,7 @@ import json
 import os
 import sqlite3
 import datetime
+import json
 
 import numpy as np
 
@@ -117,10 +118,10 @@ def wkt2extent(str_wkt:str, margin_x:float, margin_y:float, snap:int=0):
         if dimension_coord > 2:
             arr_z[i_node] = coord_float[2]
 
-    xmin_coord = arr_x.min()-margin_x
-    xmax_coord = arr_x.max()+margin_x
-    ymin_coord = arr_y.min()-margin_y
-    ymax_coord = arr_y.max()+margin_y
+    xmin_coord = arr_x.min() - margin_x
+    xmax_coord = arr_x.max() + margin_x
+    ymin_coord = arr_y.min() - margin_y
+    ymax_coord = arr_y.max() + margin_y
 
     if snap>0:
         xmin = np.round(xmin_coord / snap) * snap
@@ -151,11 +152,24 @@ def generate_shp_out(path_shp_in: str, path_shp_out: str,
                      margin_x:float=0.0, margin_y:float=0.0,
                      snap_x:float=5.0, snap_y:float=5.0):
     '''
-    DUMMY DOCSTRING
-    ~(-_~)
-     (~_-)~
-    ~(-_-)~
-     (~_~)
+    Generate a Shapefile whose feature has burst polygon as geometry,
+    bounding box information as well as other relevant attributes
+
+    Parameters:
+    -----------
+    path_shp_in: str
+        Subset of burst map in .shp file
+    path_shp_out: str
+        Output .shp file
+    margin_x: float
+        Margin to be added in x axis to determine the bounding box [m]
+    margin_y: float
+        Margin to be added in y axis to determine the bounding box [m]
+    snap_x: float
+        Snap value to which the x coordinates will be rounded [m]
+    snap_y: float
+        Snap value to which the y coordinates will be rounded [m]
+
     '''
     drv_in = ogr.GetDriverByName("ESRI Shapefile")
     datasrc_in = drv_in.Open(path_shp_in, 0)
@@ -223,6 +237,71 @@ def generate_shp_out(path_shp_in: str, path_shp_out: str,
         transform = None
 
     datasrc_out = None
+
+def get_centroid_multipolygon(geometry_in):
+
+    # Detect the number of polygons in the geometry
+    dict_geometry = json.loads(geometry_in.ExportToJson())
+    num_polygon = len(dict_geometry['coordinates'])
+
+    if num_polygon == 0:
+        raise ValueError('Cannot find polygons in the input geometry.')
+
+    elif num_polygon == 1:
+        geometry_centroid = geometry_in.Centroid()
+        dict_centroid = json.loads(geometry_centroid.ExportToJson())
+        x_centroid = dict_centroid['coordinates'][0]
+        y_centroid = dict_centroid['coordinates'][1]
+
+    elif num_polygon > 1:
+        offset_circular = 360.0
+        xy_weight_centroid = np.zeros((num_polygon, 3))
+
+        for id_polygon, nodes_polygon in enumerate(dict_geometry['coordinates']):
+            dict_sub_polygon={
+                "type": "MultiPolygon",
+                "coordinates":[nodes_polygon]}
+
+            json_sub_polygon = json.dumps(dict_sub_polygon)
+            geom_sub_polygon = ogr.CreateGeometryFromJson(json_sub_polygon)
+
+            centroid_sub_polygon = geom_sub_polygon.Centroid()
+            dict_centroid_sub_polygon = json.loads(centroid_sub_polygon.ExportToJson())
+            x_centroid = dict_centroid_sub_polygon['coordinates'][0]
+            y_centroid = dict_centroid_sub_polygon['coordinates'][1]
+            area_sub_polygon = geom_sub_polygon.Area()
+
+            xy_weight_centroid[id_polygon,:] = [(x_centroid + offset_circular) % offset_circular,
+                                                y_centroid,
+                                                area_sub_polygon]
+        
+        # Weighted sum
+        x_centroid_weighted_raw = \
+            np.sum(xy_weight_centroid[:,0] * xy_weight_centroid[:,2])\
+                   / np.sum(xy_weight_centroid[:,2])
+        y_centroid_weighted_raw = \
+            np.sum(xy_weight_centroid[:,1] * xy_weight_centroid[:,2])\
+                   / np.sum(xy_weight_centroid[:,2])
+
+        # Refine the raw result of the weighted sum coordinates
+        if x_centroid_weighted_raw > 180.0:
+            x_centroid = x_centroid_weighted_raw - offset_circular
+        elif x_centroid_weighted_raw < -180.0:
+            x_centroid = x_centroid_weighted_raw + offset_circular
+        else:
+            x_centroid = x_centroid_weighted_raw
+
+        if y_centroid_weighted_raw > 180.0:
+            y_centroid = y_centroid_weighted_raw - offset_circular
+        elif y_centroid_weighted_raw < -180.0:
+            y_centroid = y_centroid_weighted_raw + offset_circular
+        else:
+            y_centroid = y_centroid_weighted_raw
+
+    return x_centroid, y_centroid
+
+
+
 
 
 if __name__=='__main__':

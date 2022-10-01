@@ -25,7 +25,7 @@ if __name__=='__main__':
     STR_TIMESTAMP = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
     PATH_DATABASE_SRC = f'{PATH_SRC_ROOT}/sqlite/burst_map_IW_000001_375887.sqlite3'
-    PATH_DATABASE_DST = f'{PATH_DST_ROOT}/output/burst_map_IW_000001_375887.OPERA-JPL.'\
+    PATH_DATABASE_DST = f'{PATH_DST_ROOT}/data/burst_map_IW_000001_375887.OPERA-JPL.'\
                         f'{STR_TIMESTAMP}.sqlite3'
 
     MARGIN_X = 1000.0
@@ -67,9 +67,10 @@ if __name__=='__main__':
         str_subswath = row[col_id['subswath_name']]
         str_burstid_jpl = bd.get_burst_id(track_in, burst_id_in_track, str_subswath)
 
-        str_sql = f'UPDATE burst_id_map SET burst_id_jpl="{str_burstid_jpl}" WHERE '\
-                   'relative_orbit_number={track_in} AND burst_id={burst_id_in_track} AND '\
-                   'subswath_name="{str_subswath}"'
+        str_sql = (f'UPDATE burst_id_map SET burst_id_jpl="{str_burstid_jpl}" WHERE '
+                   f'relative_orbit_number={track_in} AND burst_id={burst_id_in_track} AND '
+                   f'subswath_name="{str_subswath}"')
+
         cur.execute(str_sql)
 
         if i_row % 1000 == 0:
@@ -97,18 +98,16 @@ if __name__=='__main__':
         track_in = row[col_id['relative_orbit_number']]
         burst_id_in_track = row[col_id['burst_id']]
 
-        print(f'{track_in}, {burst_id_in_track}',end='\r')
+        print(f'Track: {track_in}, Burst: {burst_id_in_track}',end='\r')
 
         geom_burst = ogr.CreateGeometryFromWkb(row[col_id['GEOMETRY']])
 
-        str_json_centroid = geom_burst.Centroid().ExportToJson()
-        dict_centroid = json.loads(str_json_centroid)
+        x_centroid, y_centroid = bd.get_centroid_multipolygon(geom_burst)
+        epsg_burst = bd.get_point_epsg(y_centroid,
+                                       x_centroid)
 
-        epsg_burst = bd.get_point_epsg(dict_centroid['coordinates'][1],
-                                       dict_centroid['coordinates'][0])
-
-        str_sql_epsg = f'UPDATE  burst_id_map SET EPSG={epsg_burst} WHERE '\
-                        'relative_orbit_number={track_in} AND burst_id={burst_id_in_track}'
+        str_sql_epsg = (f'UPDATE  burst_id_map SET EPSG={epsg_burst} WHERE '
+                        f'relative_orbit_number={track_in} AND burst_id={burst_id_in_track}')
 
         cur.execute(str_sql_epsg)
 
@@ -117,7 +116,7 @@ if __name__=='__main__':
 
     conn.commit()
 
-
+    print('\n Calculating bounding box')
     # Calculate bounding box for every row
     srs_in = osr.SpatialReference()
     srs_in.ImportFromEPSG(4326)
