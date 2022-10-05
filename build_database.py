@@ -90,10 +90,29 @@ def get_list_polygon_wkt(path_shp: str, epsg_out: str) -> dict:
     return dict_out
 
 
-def wkt2extent(str_wkt:str, margin_x:float, margin_y:float, snap:int=0):
+def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap:int=0):
     '''
     Calculate the extend of the input polygon, with margin applied.
     Performs snapping when snap>0
+
+    Parameters:
+    -----------
+    str_wkt: str
+        Polygon as WKT string
+
+    margin_x, margin_y: float
+        Margins in x / y coordinates to ba added to the polygon's extent [m]
+
+    snap: int
+        Snap interval. The x/y coordinates will be rounded to the multiples to this value.
+
+
+    Return:
+    -------
+    extent: list
+        list of float numbers for bounding box
+        [xmin, ymin, xmax, ymax]
+
     '''
 
     #print(str_wkt)
@@ -239,6 +258,21 @@ def generate_shp_out(path_shp_in: str, path_shp_out: str,
     datasrc_out = None
 
 def get_centroid_multipolygon(geometry_in):
+    '''
+    Calculate the centroid of multipolygon.
+    Takes care of geometries separated on +/- 180 degree longitude line
+
+    Parameter:
+    ----------
+    geometry_in: osgeo.ogr.Geometry
+        Burst multipolygon as OSGEO geometry object
+
+    Return:
+    -------
+    x_centroid, y_centroid: float
+        x / y coordinates of the centroid
+
+    '''
 
     # Detect the number of polygons in the geometry
     dict_geometry = json.loads(geometry_in.ExportToJson())
@@ -274,7 +308,7 @@ def get_centroid_multipolygon(geometry_in):
             xy_weight_centroid[id_polygon,:] = [(x_centroid + offset_circular) % offset_circular,
                                                 y_centroid,
                                                 area_sub_polygon]
-        
+
         # Weighted sum
         x_centroid_weighted_raw = \
             np.sum(xy_weight_centroid[:,0] * xy_weight_centroid[:,2])\
