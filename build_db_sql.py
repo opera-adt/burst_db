@@ -76,16 +76,15 @@ WITH latlon(lat, lon) AS
     SELECT Y(Centroid(geometry)), X(Centroid(geometry)) FROM {table_name}
 )
 UPDATE {table_name}
-SET epsg = (
-SELECT
+SET epsg = 
     CASE
         WHEN lat >= 75   THEN 3413
         WHEN lat <= -60  THEN 3031
         WHEN lat > 0     THEN 32601 + CAST(ROUND((lon + 177) / 6, 0) AS INTEGER)
         ELSE                  32701 + CAST(ROUND((lon + 177) / 6, 0) AS INTEGER)
     END
-FROM latlon
-);
+    FROM latlon
+;
 
 -- Columns for the bounding box limits in UTM
 ALTER TABLE {table_name} ADD xmin FLOAT;
@@ -98,30 +97,29 @@ WITH bboxes(bb) AS (
     SELECT envelope(transform(geometry, epsg)) as bb
     FROM {table_name}
 )
-UPDATE {table_name} SET (xmin, ymin, xmax, ymax) = (
-    SELECT
-        Round((ST_MinX(bb) - 1000) / 50.0) * 50.0,
-        Round((ST_MinY(bb) - 1000) / 50.0) * 50.0,
-        Round((ST_MaxX(bb) + 1000) / 50.0) * 50.0,
-        Round((ST_MaxY(bb) + 1000) / 50.0) * 50.0
-    FROM bboxes
-);
+UPDATE {table_name} SET (xmin, ymin, xmax, ymax) = 
+    Round((ST_MinX(bb) - 1000) / 50.0) * 50.0,
+    Round((ST_MinY(bb) - 1000) / 50.0) * 50.0,
+    Round((ST_MaxX(bb) + 1000) / 50.0) * 50.0,
+    Round((ST_MaxY(bb) + 1000) / 50.0) * 50.0
+FROM bboxes
+;
 
 -- Add the jpl burst id by concatenating the burst/track/subswath info
-ALTER TABLE burst_id_map ADD COLUMN burst_id_jpl VARCHAR(15);
-UPDATE {table_name} SET burst_id_jpl = (
-    SELECT 't' || printf('%03d', relative_orbit_number) || '_'
+ALTER TABLE burst_id_map ADD COLUMN burst_id_jpl VARCHAR(16);
+UPDATE {table_name} SET burst_id_jpl =
+    't' || printf('%03d', relative_orbit_number) || '_'
                || printf('%06d', burst_id) || '_'
                || lower(subswath_name) from burst_id_map
-);
+;
 
 CREATE INDEX idx_burst_id_jpl on {table_name} (burst_id_jpl);
 
 -- Drop unnecessary columns
 ALTER TABLE {table_name} DROP COLUMN geometry_wkb;
 -- These two are part of the burst_id_jpl
-ALTER TABLE {table_name} DROP COLUMN burst_id;
-ALTER TABLE {table_name} DROP COLUMN subswath_name;
+-- ALTER TABLE {table_name} DROP COLUMN burst_id;
+-- ALTER TABLE {table_name} DROP COLUMN subswath_name;
 
 COMMIT;
 """
@@ -198,6 +196,6 @@ if __name__ == "__main__":
 
     t1 = time.time()
     make_jpl_burst_db(df, args.output_path, table_name="burst_id_map")
-    print(f"Created DB in {time.time() - t1:.2f} seconds")
+    print(f"Created DB {args.output_path} in {time.time() - t1:.2f} seconds")
 
     print(f"Total script time: {time.time() - t0:.2f} seconds")
