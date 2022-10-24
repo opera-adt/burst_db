@@ -175,7 +175,7 @@ def run_cli():
         help="Path to the output database",
     )
     parser.add_argument(
-        "--limit"
+        "--limit",
         type=int,
         help="For testing, limit the number of rows to process",
     )
