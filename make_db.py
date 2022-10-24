@@ -36,13 +36,17 @@ def read_esa_db(
     return df
 
 
-def make_jpl_burst_db(df, db_path, table_name="burst_id_map", max_procs=None):
+def make_jpl_burst_db(
+    df, db_path, table_name="burst_id_map", max_procs=None, snap=50.0, margin=1000.0
+):
     print("Creating JPL burst ID")
     df["burst_id_jpl"] = ut.make_jpl_burst_id(df)
     max_procs = max_procs or 30
 
     t = time.time()
-    proc_results = ut.process_geom_parallel(df["geometry_wkb"], max_procs=max_procs)
+    proc_results = ut.process_geom_parallel(
+        df["geometry_wkb"], max_procs=max_procs, snap=snap, margin=margin
+    )
     df[["geometry_wkb", "epsg", "xmin", "ymin", "xmax", "ymax"]] = proc_results
     print(f"Processed {len(df)} geometries in {time.time() - t:.2f} seconds")
 
