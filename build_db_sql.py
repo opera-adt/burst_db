@@ -1,13 +1,19 @@
+import datetime
+import os
 import sqlite3
+import subprocess
 import sys
+import tempfile
 import time
+import zipfile
 from multiprocessing import Pool, cpu_count
 
 import pandas as pd
+import requests
 from shapely import ops, wkb
 
 ESA_DB_PATH = "/Users/staniewi/Downloads/S1_burstid_20220530/IW/sqlite/burst_map_IW_000001_375887.sqlite3"
-# ESA_DB_URL = "https://sar-mpc.eu/files/S1_burstid_20220530.zip"
+ESA_DB_URL = "https://sar-mpc.eu/files/S1_burstid_20220530.zip"
 
 
 def convert_wkb_to_2d(
@@ -127,22 +133,43 @@ COMMIT;
         con.execute("VACUUM;")
 
 
+def get_esa_burst_db(output_path="esa_burst_map.sqlite3"):
+    """Download the ESA burst database and convert to 2D."""
+    # Download the ESA burst database
+
+    print("Downloading ESA burst database")
+    db_filename = "S1_burstid_20220530/IW/sqlite/burst_map_IW_000001_375887.sqlite3"
+    cur_dir = os.getcwd()
+    output_path = os.path.abspath(output_path)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        try:
+            os.chdir(tmpdir)
+            subprocess.check_call(["wget", ESA_DB_URL])
+
+            with zipfile.ZipFile(ESA_DB_URL.split("/")[-1], "r") as zip_ref:
+                zip_ref.extract(db_filename)
+                os.rename(db_filename, output_path)
+        finally:
+            os.chdir(cur_dir)
+
+
 if __name__ == "__main__":
     try:
-        db_path = sys.argv[1]
+        output_db_path = sys.argv[1]
     except IndexError:
-        db_path = "new_bursts.db"
+        now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_db_name = f"burst_map_IW_000001_375887.OPERA-JPL.{now_str}.sqlite3"
     try:
         limit = int(sys.argv[2])
     except IndexError:
         limit = None
 
     t0 = time.time()
-    df = convert_wkb_to_2d(db_path=db_path, limit=limit)
+    df = convert_wkb_to_2d(db_path=output_db_path, limit=limit)
     print(f"Converted in {time.time() - t0:.2f} seconds")
 
     t1 = time.time()
-    make_jpl_burst_db(df, db_path, table_name="burst_id_map")
+    make_jpl_burst_db(df, output_db_path, table_name="burst_id_map")
     print(f"Created DB in {time.time() - t1:.2f} seconds")
 
     print(f"Total script time: {time.time() - t0:.2f} seconds")
