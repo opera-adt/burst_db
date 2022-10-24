@@ -64,6 +64,16 @@ def make_jpl_burst_db(df, db_path, table_name="burst_id_map"):
     sql = f"""
 BEGIN;
 SELECT InitSpatialMetaData();
+-- Bug in spatialite: https://www.gaia-gis.it/fossil/libspatialite/tktview/8b6910dbbb2180026af54a5cc5aac107fb1d62ad
+
+INSERT INTO spatial_ref_sys
+(srid, auth_name, auth_srid, ref_sys_name, proj4text, srtext)
+VALUES (32760, 'epsg', 32760,
+'WGS 84 / UTM zone 60S',
+'+proj=utm +zone=60 +south +datum=WGS84 +units=m +no_defs',
+'PROJCS["WGS 84 / UTM zone 60S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",177],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","32760"]]'
+);
+
 CREATE INDEX idx_OGC_FID on {table_name} (OGC_FID);
 
 SELECT AddGeometryColumn('{table_name}', 'geometry', 4326, 'MULTIPOLYGON', 'XY');
@@ -75,7 +85,7 @@ ALTER TABLE {table_name} ADD epsg INTEGER;
 WITH latlon AS
 (
     SELECT Y(Centroid(geometry)) as lat,
-           X(Centroid(geometry)) as lon, 
+           X(Centroid(geometry)) as lon,
            OGC_FID 
     FROM {table_name}
 )
