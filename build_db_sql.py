@@ -1,5 +1,6 @@
 import datetime
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -9,7 +10,6 @@ import zipfile
 from multiprocessing import Pool, cpu_count
 
 import pandas as pd
-import requests
 from shapely import ops, wkb
 
 ESA_DB_PATH = "/Users/staniewi/Downloads/S1_burstid_20220530/IW/sqlite/burst_map_IW_000001_375887.sqlite3"
@@ -17,12 +17,12 @@ ESA_DB_URL = "https://sar-mpc.eu/files/S1_burstid_20220530.zip"
 
 
 def convert_wkb_to_2d(
-    orig_db_path=ESA_DB_PATH,
+    esa_db_path=ESA_DB_PATH,
     limit=None,
 ):
     """Read in the ESA burst database and convert the wkb geometry to 2D."""
     print("Reading original ESA burst database")
-    with sqlite3.connect(orig_db_path) as con:
+    with sqlite3.connect(esa_db_path) as con:
         query = f"SELECT * FROM burst_id_map"
         if limit:
             query += f" LIMIT {limit}"
@@ -148,7 +148,8 @@ def get_esa_burst_db(output_path="esa_burst_map.sqlite3"):
 
             with zipfile.ZipFile(ESA_DB_URL.split("/")[-1], "r") as zip_ref:
                 zip_ref.extract(db_filename)
-                os.rename(db_filename, output_path)
+                shutil.move(db_filename, output_path)
+                shutil.rmtree(db_filename.split("/")[0])
         finally:
             os.chdir(cur_dir)
 
@@ -164,8 +165,16 @@ if __name__ == "__main__":
     except IndexError:
         limit = None
 
+    if os.path.exists(ESA_DB_PATH):
+        esa_db_path = ESA_DB_PATH
+    else:
+        print("ESA database not found, downloading...")
+        t = time.time()
+        esa_db_path = "esa_burst_map.sqlite3"
+        get_esa_burst_db(esa_db_path)
+        print(f"ESA database downloaded in {time.time() - t:.2f} seconds")
     t0 = time.time()
-    df = convert_wkb_to_2d(db_path=output_db_path, limit=limit)
+    df = convert_wkb_to_2d(esa_db_path=esa_db_path, db_path=output_db_path, limit=limit)
     print(f"Converted in {time.time() - t0:.2f} seconds")
 
     t1 = time.time()
