@@ -174,6 +174,11 @@ def run_cli():
         default=f"burst_map_IW_000001_375887.OPERA-JPL.{now_str}.sqlite3",
         help="Path to the output database",
     )
+    parser.add_argument(
+        "--limit"
+        type=int,
+        help="For testing, limit the number of rows to process",
+    )
     args = parser.parse_args()
     return args
 
