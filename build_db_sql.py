@@ -50,7 +50,7 @@ def _convert_wkb_to_2d(b):
 
 
 def _convert_wkb_to_2d_parallel(wkb_series):
-    workers = min(10, cpu_count())
+    workers = min(25, cpu_count())
     print(f"Using {workers} workers to convert wkb to 2d")
     with Pool(workers) as p:
         # print(p.map(f, [1, 2, 3]))
@@ -192,7 +192,7 @@ if __name__ == "__main__":
         print(f"ESA database downloaded in {time.time() - t:.2f} seconds")
     t0 = time.time()
     df = convert_wkb_to_2d(
-        esa_db_path=args.esa_db_path, db_path=args.output_path, limit=args.limit
+        esa_db_path=args.esa_db_path, limit=args.limit
     )
     print(f"Converted in {time.time() - t0:.2f} seconds")
 
