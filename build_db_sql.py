@@ -1,9 +1,9 @@
+import argparse
 import datetime
 import os
 import shutil
 import sqlite3
 import subprocess
-import sys
 import tempfile
 import time
 import zipfile
@@ -12,7 +12,7 @@ from multiprocessing import Pool, cpu_count
 import pandas as pd
 from shapely import ops, wkb
 
-ESA_DB_PATH = "/Users/staniewi/Downloads/S1_burstid_20220530/IW/sqlite/burst_map_IW_000001_375887.sqlite3"
+ESA_DB_PATH = "burst_map_IW_000001_375887.sqlite3"
 ESA_DB_URL = "https://sar-mpc.eu/files/S1_burstid_20220530.zip"
 
 
@@ -154,31 +154,43 @@ def get_esa_burst_db(output_path="esa_burst_map.sqlite3"):
             os.chdir(cur_dir)
 
 
-if __name__ == "__main__":
-    try:
-        output_db_path = sys.argv[1]
-    except IndexError:
-        now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_db_name = f"burst_map_IW_000001_375887.OPERA-JPL.{now_str}.sqlite3"
-    try:
-        limit = int(sys.argv[2])
-    except IndexError:
-        limit = None
+def run_cli():
+    # Get the esa burst database path and output path
+    now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument(
+        "--esa-db-path",
+        default="burst_map_IW_000001_375887.sqlite3",
+        help=(
+            "Path to the ESA sqlite burst database to convert, "
+            f"downloaded from {ESA_DB_URL} . Will be downloaded if not exists."
+        ),
+    )
+    parser.add_argument(
+        "--output-path",
+        type=str,
+        default=f"burst_map_IW_000001_375887.OPERA-JPL.{now_str}.sqlite3",
+        help="Path to the output database",
+    )
+    args = parser.parse_args()
+    return args
 
-    if os.path.exists(ESA_DB_PATH):
-        esa_db_path = ESA_DB_PATH
-    else:
+
+if __name__ == "__main__":
+    args = run_cli()
+    if not os.path.exists(args.esa_db_path):
         print("ESA database not found, downloading...")
         t = time.time()
-        esa_db_path = "esa_burst_map.sqlite3"
-        get_esa_burst_db(esa_db_path)
+        get_esa_burst_db(args.esa_db_path)
         print(f"ESA database downloaded in {time.time() - t:.2f} seconds")
     t0 = time.time()
-    df = convert_wkb_to_2d(esa_db_path=esa_db_path, db_path=output_db_path, limit=limit)
+    df = convert_wkb_to_2d(
+        esa_db_path=args.esa_db_path, db_path=args.output_db_path, limit=args.limit
+    )
     print(f"Converted in {time.time() - t0:.2f} seconds")
 
     t1 = time.time()
-    make_jpl_burst_db(df, output_db_path, table_name="burst_id_map")
+    make_jpl_burst_db(df, args.output_db_path, table_name="burst_id_map")
     print(f"Created DB in {time.time() - t1:.2f} seconds")
 
     print(f"Total script time: {time.time() - t0:.2f} seconds")
