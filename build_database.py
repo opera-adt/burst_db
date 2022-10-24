@@ -1,7 +1,7 @@
-"""
+'''
 A code to build the database for S1 burst coverage
 The codes in the `__main__` namespace will be deprecated.
-"""
+'''
 
 import json
 import os
@@ -13,121 +13,8 @@ import numpy as np
 
 from osgeo import ogr, osr
 
-import geopandas as gpd
-from shapely.geometry import shape, mapping, Polygon
-from fiona.transform import transform_geom
-from pyproj import Transformer
-
-def get_epsg_bbox(geom, snap=50.0, margin=1000.0):
-    epsg = get_epsg(geom[0])
-    bbox = get_utm_bbox(geom[0], epsg, snap=snap, margin=margin)
-    return epsg, *bbox
-
-def get_epsg(geom):
-    if len(geom.geoms) == 1:
-        point = geom.centroid
-    else:
-        # antimeridian case
-        # Transform to the first UTM zone, get the centroid, then transform back
-        # Doesnt matter if it's the right EPSG; just need it to be in
-        # projected coordinates to make the centroid easy
-        utm_epsg = 32601 if geom.centroid.y > 0 else 32701
-        geoseries = gpd.GeoSeries(geom, crs="EPSG:4326")
-        point = geoseries.to_crs(epsg=utm_epsg).centroid.to_crs(epsg=4326)[0]
-
-    return get_point_epsg(point.y, point.x)
-
-def get_utm_bbox(geom, epsg, snap=50.0, margin=1000.0):
-    geom_transformed = transform(geom, epsg)
-    return snap_bbox(geom_transformed.bounds, margin, snap)
-
-
-def transform(geom, dst_epsg, src_epsg=4326):
-    if len(geom.geoms) == 1:
-        t = Transformer.from_crs(
-            f"EPSG:{src_epsg}",
-            f"EPSG:{dst_epsg}",
-            always_xy=True,
-        )
-        poly = geom.geoms[0]
-        x, y, z = zip(*poly.exterior.coords)
-        x2, y2 = t.transform(x, y)
-        return Polygon(zip(x2, y2))
-    else:
-        # https://geopandas.org/en/stable/docs/user_guide/reproject_fiona.html?highlight=antimeridian
-        return shape(
-            transform_geom(
-                src_crs=f"EPSG:{src_epsg}",
-                dst_crs=f"EPSG:{dst_epsg}",
-                geom=mapping(geom),
-            )
-        )
-
-
-def snap_bbox(bbox, margin=1000, snap=50):
-    xmin, ymin, xmax, ymax = bbox
-
-    if margin > 0:
-        xmin -= margin
-        xmax += margin
-        ymin -= margin
-        ymax += margin
-
-    if snap > 0:
-        xmin = np.round(xmin / snap) * snap
-        xmax = np.round(xmax / snap) * snap
-        ymin = np.round(ymin / snap) * snap
-        ymax = np.round(ymax / snap) * snap
-
-    return (xmin, ymin, xmax, ymax)
-
-
-def make_spatialite_db(df, table_name="burst_id_map", outname="new_burst.db"):
-    con_out = sqlite3.connect(outname)
-    con_out.enable_load_extension(True)
-    cur_out = con_out.cursor()
-    cur_out.execute("SELECT load_extension('mod_spatialite')")
-    con_out.execute("SELECT InitSpatialMetadata()")
-
-    #  burst_id INTEGER,
-    cur_out.execute(
-        f"""CREATE TABLE {table_name} (
-        idx INTEGER PRIMARY KEY,
-        geometry_wkb BLOB,
-        burst_id_jpl TEXT,
-        relative_orbit_number INTEGER,
-        time_from_anx_sec REAL,
-        orbit_pass TEXT,
-        EPSG INTEGER,
-        xmin REAL,
-        ymin REAL,
-        xmax REAL,
-        ymax REAL
-    );
-    """
-    )
-    # Add spatial stuff
-    # Be warned: only Geometries created using AddGeometryColumn() are fully legitimate.
-    # http://www.gaia-gis.it/gaia-sins/spatialite-cookbook/html/new-geom.html
-    cur_out.execute(
-        f"SELECT AddGeometryColumn('{table_name}', 'geometry', 4326, 'MULTIPOLYGON', 'XYZ');"
-    )
-
-    df.to_sql(table_name, con_out, if_exists="append", index_label="idx")
-
-    cur_out.execute(
-        f"UPDATE {table_name} SET geometry = GeomFromWKB(geometry_wkb, 4326);"
-    )
-    cur_out.execute(f"ALTER TABLE {table_name} DROP COLUMN geometry_wkb;")
-    # Then add a spatial index, and index on the jpl burst id
-    cur_out.execute("SELECT CreateSpatialIndex('burst_id_map', 'geometry');")
-    cur_out.execute(f"CREATE INDEX  idx_burst_id_jpl on {table_name} (burst_id_jpl);")
-    con_out.commit()
-    con_out.close()
-
-
 def get_point_epsg(lat, lon):
-    """
+    '''
     Get EPSG code based on latitude and longitude
     coordinates of a point
     Borrowed from geogrid.py in OPERA RTC
@@ -143,7 +30,7 @@ def get_point_epsg(lat, lon):
     -------
     epsg: int
         UTM zone
-    """
+    '''
 
     # "wrap" the longitude value into range [-180.0, 180.0]
     if (lon >= 180.0) or (lon <= -180.0):
@@ -163,9 +50,9 @@ def get_point_epsg(lat, lon):
 
 
 def get_list_polygon_wkt(path_shp: str, epsg_out: str) -> dict:
-    """Take the path to the .shp file.
-    Returns the list of the polygons in the input as WKT string
-    """
+    '''Take the path to the .shp file.
+       Returns the list of the polygons in the input as WKT string
+    '''
 
     drv_in = ogr.GetDriverByName("ESRI Shapefile")
     datasrc_in = drv_in.Open(path_shp, 0)
@@ -180,31 +67,31 @@ def get_list_polygon_wkt(path_shp: str, epsg_out: str) -> dict:
     num_field = lyr_in.GetLayerDefn().GetFieldCount()
 
     dict_out = {}
-    dict_out["wkt"] = [None] * num_feat
-    dict_out["field"] = [None] * num_field
+    dict_out['wkt'] = [None] * num_feat
+    dict_out['field'] = [None] * num_field
 
-    # Load the field info and set up the list for the attribute
+    #Load the field info and set up the list for the attribute
     for i_field in range(num_field):
         str_field = lyr_in.GetLayerDefn().GetFieldDefn(i_field).GetName()
-        dict_out["field"][i_field] = str_field
-        dict_out[str_field] = [None] * num_feat
+        dict_out['field'][i_field] = str_field
+        dict_out[str_field] = [None]*num_feat
 
     for i_feat, feat in enumerate(lyr_in):
-        print(f"{i_feat + 1} / {num_feat}", end="\r")
+        print(f'{i_feat + 1} / {num_feat}', end='\r')
         geom = feat.GetGeometryRef()
         geom.Transform(transform)
 
-        dict_out["wkt"][i_feat] = geom.ExportToWkt()
-        for str_field in dict_out["field"]:
+        dict_out['wkt'][i_feat] = geom.ExportToWkt()
+        for str_field in dict_out['field']:
             dict_out[str_field][i_feat] = feat.GetField(str_field)
 
-    print("\n")
+    print('\n')
 
     return dict_out
 
 
-def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap: int = 0):
-    """
+def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap:int=0):
+    '''
     Calculate the extend of the input polygon, with margin applied.
     Performs snapping when snap>0
 
@@ -226,10 +113,12 @@ def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap: int = 0):
         list of float numbers for bounding box
         [xmin, ymin, xmax, ymax]
 
-    """
+    '''
 
-    # print(str_wkt)
-    token_coord = str_wkt.split("((")[-1].split("))")[0].split(",")
+    #print(str_wkt)
+    token_coord = str_wkt.split('((')[-1]\
+                         .split('))')[0]\
+                         .split(',')
 
     num_node = len(token_coord)
 
@@ -237,11 +126,11 @@ def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap: int = 0):
     arr_y = np.zeros(num_node)
     arr_z = np.zeros(num_node)
 
-    # Test the first coord string to deterimine its dimension
-    dimension_coord = len(token_coord[0].split(" "))
+    #Test the first coord string to deterimine its dimension
+    dimension_coord = len(token_coord[0].split(' '))
 
     for i_node, str_coord in enumerate(token_coord):
-        coord_float = [float(coord) for coord in str_coord.split(" ")]
+        coord_float = [float(coord) for coord in str_coord.split(' ')]
         arr_x[i_node] = coord_float[0]
         arr_y[i_node] = coord_float[1]
 
@@ -253,7 +142,7 @@ def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap: int = 0):
     ymin_coord = arr_y.min() - margin_y
     ymax_coord = arr_y.max() + margin_y
 
-    if snap > 0:
+    if snap>0:
         xmin = np.round(xmin_coord / snap) * snap
         xmax = np.round(xmax_coord / snap) * snap
         ymin = np.round(ymin_coord / snap) * snap
@@ -264,28 +153,24 @@ def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap: int = 0):
         ymin = ymin_coord
         ymax = ymax_coord
 
-    extent = [xmin, ymin, xmax, ymax]
+    extent=[xmin, ymin, xmax, ymax]
 
     return extent
 
 
-def get_burst_id(track: int, burst: int, swath: str) -> str:
-    """Get the string of burst ID."""
-    form_burst_id = "t{TRACK:03d}_{BURST:06d}_{SWATH}"
+def get_burst_id(track:int, burst:int, swath:str) -> str:
+    '''Get the string of burst ID.
+    '''
+    form_burst_id = 't{TRACK:03d}_{BURST:06d}_{SWATH}'
     str_burst_id = form_burst_id.format(TRACK=track, BURST=burst, SWATH=swath.lower())
 
     return str_burst_id
 
 
-def generate_shp_out(
-    path_shp_in: str,
-    path_shp_out: str,
-    margin_x: float = 0.0,
-    margin_y: float = 0.0,
-    snap_x: float = 5.0,
-    snap_y: float = 5.0,
-):
-    """
+def generate_shp_out(path_shp_in: str, path_shp_out: str,
+                     margin_x:float=0.0, margin_y:float=0.0,
+                     snap_x:float=5.0, snap_y:float=5.0):
+    '''
     Generate a Shapefile whose feature has burst polygon as geometry,
     bounding box information as well as other relevant attributes
 
@@ -304,40 +189,39 @@ def generate_shp_out(
     snap_y: float
         Snap value to which the y coordinates will be rounded [m]
 
-    """
+    '''
     drv_in = ogr.GetDriverByName("ESRI Shapefile")
     datasrc_in = drv_in.Open(path_shp_in, 0)
     lyr_in = datasrc_in.GetLayer()
     srs_in = lyr_in.GetSpatialRef()
     num_feat = lyr_in.GetFeatureCount()
 
-    # set up the output .shp file
+    #set up the output .shp file
     drv_out = ogr.GetDriverByName("ESRI Shapefile")
     datasrc_out = drv_out.CreateDataSource(path_shp_out)
-    lyr_out = datasrc_out.CreateLayer("Bursts", srs_in, ogr.wkbPolygon)
+    lyr_out = datasrc_out.CreateLayer('Bursts', srs_in, ogr.wkbPolygon)
 
     field_burst_id = ogr.FieldDefn("burst_id", ogr.OFTString)
     field_burst_id.SetWidth(22)
     lyr_out.CreateField(field_burst_id)
-    lyr_out.CreateField(ogr.FieldDefn("Track", ogr.OFTInteger))
-    lyr_out.CreateField(ogr.FieldDefn("EPSG", ogr.OFTInteger))
-    lyr_out.CreateField(ogr.FieldDefn("xmin", ogr.OFTReal))
-    lyr_out.CreateField(ogr.FieldDefn("xmax", ogr.OFTReal))
-    lyr_out.CreateField(ogr.FieldDefn("ymin", ogr.OFTReal))
-    lyr_out.CreateField(ogr.FieldDefn("ymax", ogr.OFTReal))
+    lyr_out.CreateField(ogr.FieldDefn('Track', ogr.OFTInteger))
+    lyr_out.CreateField(ogr.FieldDefn('EPSG', ogr.OFTInteger))
+    lyr_out.CreateField(ogr.FieldDefn('xmin', ogr.OFTReal))
+    lyr_out.CreateField(ogr.FieldDefn('xmax', ogr.OFTReal))
+    lyr_out.CreateField(ogr.FieldDefn('ymin', ogr.OFTReal))
+    lyr_out.CreateField(ogr.FieldDefn('ymax', ogr.OFTReal))
 
     for i_feat, feat_in in enumerate(lyr_in):
-        print(f"Processing: {i_feat + 1} / {num_feat}", end="\r")
+        print(f'Processing: {i_feat + 1} / {num_feat}', end='\r')
         geom = feat_in.GetGeometryRef()
         str_dict_centroid = geom.Centroid().ExportToJson()
         dict_centroid = json.loads(str_dict_centroid)
-        epsg_burst = get_point_epsg(
-            dict_centroid["coordinates"][1], dict_centroid["coordinates"][0]
-        )
+        epsg_burst = get_point_epsg(dict_centroid['coordinates'][1],
+                                    dict_centroid['coordinates'][0])
 
-        track = feat_in.GetField("relative_o")
-        butst_id_in_track = feat_in.GetField("burst_id")
-        swath = feat_in.GetField("subswath_n")
+        track = feat_in.GetField('relative_o')
+        butst_id_in_track = feat_in.GetField('burst_id')
+        swath = feat_in.GetField('subswath_n')
 
         str_burst_id = get_burst_id(track, butst_id_in_track, swath)
         srs_out = osr.SpatialReference()
@@ -349,21 +233,21 @@ def generate_shp_out(
         # Extract the coordinates after the transformation
         geom.Transform(transform)
         dict_geom_tformed = json.loads(geom.ExportToJson())
-        nparr_coord_tformed = np.array(dict_geom_tformed["coordinates"][0])
+        nparr_coord_tformed = np.array(dict_geom_tformed['coordinates'][0])
 
-        xmin = np.round((nparr_coord_tformed[:, 0].min() - margin_x) / snap_x) * snap_x
-        xmax = np.round((nparr_coord_tformed[:, 0].max() + margin_x) / snap_x) * snap_x
-        ymin = np.round((nparr_coord_tformed[:, 1].min() - margin_y) / snap_y) * snap_y
-        ymax = np.round((nparr_coord_tformed[:, 1].max() + margin_y) / snap_y) * snap_y
+        xmin = np.round((nparr_coord_tformed[:,0].min() - margin_x) / snap_x) * snap_x
+        xmax = np.round((nparr_coord_tformed[:,0].max() + margin_x) / snap_x) * snap_x
+        ymin = np.round((nparr_coord_tformed[:,1].min() - margin_y) / snap_y) * snap_y
+        ymax = np.round((nparr_coord_tformed[:,1].max() + margin_y) / snap_y) * snap_y
 
         feat_out = ogr.Feature(lyr_out.GetLayerDefn())
-        feat_out.SetField("burst_id", str_burst_id)
-        feat_out.SetField("Track", track)
-        feat_out.SetField("EPSG", epsg_burst)
-        feat_out.SetField("xmin", xmin)
-        feat_out.SetField("xmax", xmax)
-        feat_out.SetField("ymin", ymin)
-        feat_out.SetField("ymax", ymax)
+        feat_out.SetField('burst_id', str_burst_id)
+        feat_out.SetField('Track', track)
+        feat_out.SetField('EPSG', epsg_burst)
+        feat_out.SetField('xmin', xmin)
+        feat_out.SetField('xmax', xmax)
+        feat_out.SetField('ymin', ymin)
+        feat_out.SetField('ymax', ymax)
         feat_out.SetGeometry(ogr.CreateGeometryFromWkt(wkt_polygon_before_transform))
 
         lyr_out.CreateFeature(feat_out)
@@ -373,9 +257,8 @@ def generate_shp_out(
 
     datasrc_out = None
 
-
-def get_centroid_multipolygon(geometry_in, dict_geometry=None):
-    """
+def get_centroid_multipolygon(geometry_in):
+    '''
     Calculate the centroid of multipolygon.
     Takes care of geometries separated on +/- 180 degree longitude line
 
@@ -389,51 +272,50 @@ def get_centroid_multipolygon(geometry_in, dict_geometry=None):
     x_centroid, y_centroid: float
         x / y coordinates of the centroid
 
-    """
-    if dict_geometry is None:
-        # Detect the number of polygons in the geometry
-        dict_geometry = json.loads(geometry_in.ExportToJson())
+    '''
 
-    num_polygon = len(dict_geometry["coordinates"])
+    # Detect the number of polygons in the geometry
+    dict_geometry = json.loads(geometry_in.ExportToJson())
+    num_polygon = len(dict_geometry['coordinates'])
 
     if num_polygon == 0:
-        raise ValueError("Cannot find polygons in the input geometry.")
+        raise ValueError('Cannot find polygons in the input geometry.')
 
     elif num_polygon == 1:
         geometry_centroid = geometry_in.Centroid()
         dict_centroid = json.loads(geometry_centroid.ExportToJson())
-        x_centroid = dict_centroid["coordinates"][0]
-        y_centroid = dict_centroid["coordinates"][1]
+        x_centroid = dict_centroid['coordinates'][0]
+        y_centroid = dict_centroid['coordinates'][1]
 
     elif num_polygon > 1:
         offset_circular = 360.0
         xy_weight_centroid = np.zeros((num_polygon, 3))
 
-        for id_polygon, nodes_polygon in enumerate(dict_geometry["coordinates"]):
-            dict_sub_polygon = {"type": "MultiPolygon", "coordinates": [nodes_polygon]}
+        for id_polygon, nodes_polygon in enumerate(dict_geometry['coordinates']):
+            dict_sub_polygon={
+                "type": "MultiPolygon",
+                "coordinates":[nodes_polygon]}
 
             json_sub_polygon = json.dumps(dict_sub_polygon)
             geom_sub_polygon = ogr.CreateGeometryFromJson(json_sub_polygon)
 
             centroid_sub_polygon = geom_sub_polygon.Centroid()
             dict_centroid_sub_polygon = json.loads(centroid_sub_polygon.ExportToJson())
-            x_centroid = dict_centroid_sub_polygon["coordinates"][0]
-            y_centroid = dict_centroid_sub_polygon["coordinates"][1]
+            x_centroid = dict_centroid_sub_polygon['coordinates'][0]
+            y_centroid = dict_centroid_sub_polygon['coordinates'][1]
             area_sub_polygon = geom_sub_polygon.Area()
 
-            xy_weight_centroid[id_polygon, :] = [
-                (x_centroid + offset_circular) % offset_circular,
-                y_centroid,
-                area_sub_polygon,
-            ]
+            xy_weight_centroid[id_polygon,:] = [(x_centroid + offset_circular) % offset_circular,
+                                                y_centroid,
+                                                area_sub_polygon]
 
         # Weighted sum
-        x_centroid_weighted_raw = np.sum(
-            xy_weight_centroid[:, 0] * xy_weight_centroid[:, 2]
-        ) / np.sum(xy_weight_centroid[:, 2])
-        y_centroid_weighted_raw = np.sum(
-            xy_weight_centroid[:, 1] * xy_weight_centroid[:, 2]
-        ) / np.sum(xy_weight_centroid[:, 2])
+        x_centroid_weighted_raw = \
+            np.sum(xy_weight_centroid[:,0] * xy_weight_centroid[:,2])\
+                   / np.sum(xy_weight_centroid[:,2])
+        y_centroid_weighted_raw = \
+            np.sum(xy_weight_centroid[:,1] * xy_weight_centroid[:,2])\
+                   / np.sum(xy_weight_centroid[:,2])
 
         # Refine the raw result of the weighted sum coordinates
         if x_centroid_weighted_raw > 180.0:
@@ -453,22 +335,24 @@ def get_centroid_multipolygon(geometry_in, dict_geometry=None):
     return x_centroid, y_centroid
 
 
-if __name__ == "__main__":
+
+
+
+if __name__=='__main__':
     # Burst ID, projection, xmin, ymin, xmax, ymax
-    STR_TIMESTAMP = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    STR_TIMESTAMP = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     PATH_TOP = os.path.dirname(__file__)
 
-    SHP_IN = f"{PATH_TOP}/data/Burstmap_Lower_US.shp"
-    SHP_OUT = f"{PATH_TOP}/data/Burst_Coverage_Metadata.shp".replace(
-        ".shp", f".{STR_TIMESTAMP}.shp"
-    )
-    CSV_OUT = f"{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.csv"
-    JSON_OUT = f"{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.json"
-    SQLITE_OUT = f"{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.sqlite3"
+    SHP_IN = f'{PATH_TOP}/data/Burstmap_Lower_US.shp'
+    SHP_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata.shp'\
+              .replace('.shp', f'.{STR_TIMESTAMP}.shp')
+    CSV_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.csv'
+    JSON_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.json'
+    SQLITE_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.sqlite3'
 
     # epsg=4326
     # epsg=102003 #USA Contiguous Albers Equal Area Conic - Causes an error when using it
-    EPSG_DEFAULT = 32610  # UTM 10N
+    EPSG_DEFAULT = 32610 #UTM 10N
     MARGIN_X = 1000.0
     MARGIN_Y = 1000.0
     SNAP_X = 50.0
@@ -478,64 +362,60 @@ if __name__ == "__main__":
 
     dict_burst_info = get_list_polygon_wkt(SHP_IN, EPSG_DEFAULT)
 
-    num_burst = len(dict_burst_info["wkt"])
+    num_burst = len(dict_burst_info['wkt'])
 
     list_extent = [None] * num_burst
     list_burst_id = [None] * num_burst
-    for i_burst, wkt in enumerate(dict_burst_info["wkt"]):
-        list_extent[i_burst] = wkt2extent(wkt, MARGIN_X, MARGIN_Y, 50)
-        list_burst_id[i_burst] = get_burst_id(
-            dict_burst_info["relative_o"][i_burst],
-            dict_burst_info["burst_id"][i_burst],
-            dict_burst_info["subswath_n"][i_burst],
-        )
+    for i_burst, wkt in enumerate(dict_burst_info['wkt']):
+        list_extent[i_burst] = wkt2extent(wkt,MARGIN_X,MARGIN_Y,50)
+        list_burst_id[i_burst] = get_burst_id(dict_burst_info['relative_o'][i_burst],
+                                        dict_burst_info['burst_id'][i_burst],
+                                        dict_burst_info['subswath_n'][i_burst])
 
-    # Export to CSV
-    list_field_out = ["burst_id", "epsg", "xmin", "ymin", "xmax", "ymax"]
-    with open(CSV_OUT, "w+", encoding="utf8") as fout:
-        fout.write(", ".join(list_field_out) + "\n")
+
+    #Export to CSV
+    list_field_out = ['burst_id','epsg','xmin','ymin','xmax','ymax']
+    with open(CSV_OUT, 'w+', encoding='utf8') as fout:
+        fout.write(', '.join(list_field_out)+'\n')
 
         for i_burst in range(num_burst):
-            str_line_csv = (
-                f"{list_burst_id[i_burst]}, "
-                f"{EPSG_DEFAULT}, "
-                f"{list_extent[i_burst][0]}, "
-                f"{list_extent[i_burst][1]}, "
-                f"{list_extent[i_burst][2]}, "
-                f"{list_extent[i_burst][3]}\n"
-            )
+            str_line_csv = f'{list_burst_id[i_burst]}, '\
+                           f'{EPSG_DEFAULT}, '\
+                           f'{list_extent[i_burst][0]}, '\
+                           f'{list_extent[i_burst][1]}, '\
+                           f'{list_extent[i_burst][2]}, '\
+                           f'{list_extent[i_burst][3]}\n'
             fout.write(str_line_csv)
 
-    # Export to json
-    dict_export = {}
+    #Export to json
+    dict_export={}
     for i in range(num_burst):
-        dict_export[list_burst_id[i]] = {"EPSG": EPSG_DEFAULT, "extent": list_extent[i]}
+        dict_export[list_burst_id[i]]={
+            'EPSG':EPSG_DEFAULT,
+            'extent':list_extent[i]
+        }
 
-    with open(JSON_OUT, "w+", encoding="utf8") as fout:
+    with open(JSON_OUT, 'w+', encoding='utf8') as fout:
         json.dump(dict_export, fout, indent=2)
 
-    # export to sqlite
+    #export to sqlite
     with sqlite3.connect(SQLITE_OUT) as conn:
-        cur = conn.cursor()
-        cur.execute(
-            """CREATE TABLE IF NOT EXISTS burst (
+        cur=conn.cursor()
+        cur.execute('''CREATE TABLE IF NOT EXISTS burst (
             burst_id text PRIMARY KEY,
             EPSG integer,
             xmin float,
             ymin float,
             xmax float,
             ymax float);
-            """
-        )
+            ''')
 
         for i_burst in range(num_burst):
-            str_sql_command = (
-                f"INSERT INTO burst (burst_id ,EPSG, xmin, ymin, xmax, ymax) "
-                f'VALUES("{list_burst_id[i_burst]}", {EPSG_DEFAULT}, '
-                f"{list_extent[i_burst][0]}, {list_extent[i_burst][1]}, "
-                f"{list_extent[i_burst][2]}, {list_extent[i_burst][3]})"
-            )
+            str_sql_command=f'INSERT INTO burst (burst_id ,EPSG, xmin, ymin, xmax, ymax) '\
+                            f'VALUES("{list_burst_id[i_burst]}", {EPSG_DEFAULT}, '\
+                            f'{list_extent[i_burst][0]}, {list_extent[i_burst][1]}, '\
+                            f'{list_extent[i_burst][2]}, {list_extent[i_burst][3]})'
 
             cur.execute(str_sql_command)
-        cur.execute("CREATE INDEX index_burst ON burst (burst_id)")
+        cur.execute('CREATE INDEX index_burst ON burst (burst_id)')
         conn.commit()
