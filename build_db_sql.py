@@ -157,7 +157,9 @@ def get_esa_burst_db(output_path="esa_burst_map.sqlite3"):
 def run_cli():
     # Get the esa burst database path and output path
     now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument(
         "--esa-db-path",
         default="burst_map_IW_000001_375887.sqlite3",
@@ -185,12 +187,12 @@ if __name__ == "__main__":
         print(f"ESA database downloaded in {time.time() - t:.2f} seconds")
     t0 = time.time()
     df = convert_wkb_to_2d(
-        esa_db_path=args.esa_db_path, db_path=args.output_db_path, limit=args.limit
+        esa_db_path=args.esa_db_path, db_path=args.output_path, limit=args.limit
     )
     print(f"Converted in {time.time() - t0:.2f} seconds")
 
     t1 = time.time()
-    make_jpl_burst_db(df, args.output_db_path, table_name="burst_id_map")
+    make_jpl_burst_db(df, args.output_path, table_name="burst_id_map")
     print(f"Created DB in {time.time() - t1:.2f} seconds")
 
     print(f"Total script time: {time.time() - t0:.2f} seconds")
