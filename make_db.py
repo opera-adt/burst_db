@@ -36,12 +36,13 @@ def read_esa_db(
     return df
 
 
-def make_jpl_burst_db(df, db_path, table_name="burst_id_map"):
+def make_jpl_burst_db(df, db_path, table_name="burst_id_map", max_procs=None):
     print("Creating JPL burst ID")
     df["burst_id_jpl"] = ut.make_jpl_burst_id(df)
+    max_procs = max_procs or 30
 
     t = time.time()
-    proc_results = ut.process_geom_parallel(df["geometry_wkb"])
+    proc_results = ut.process_geom_parallel(df["geometry_wkb"], max_procs=max_procs)
     df[["geometry_wkb", "epsg", "xmin", "ymin", "xmax", "ymax"]] = proc_results
     print(f"Processed {len(df)} geometries in {time.time() - t:.2f} seconds")
 
@@ -59,6 +60,7 @@ CREATE INDEX idx_OGC_FID on {table_name} (OGC_FID);
 
 SELECT AddGeometryColumn('{table_name}', 'geometry', 4326, 'MULTIPOLYGON', 'XY');
 UPDATE {table_name} SET geometry=GeomFromWKB(geometry_wkb, 4326);
+SELECT CreateSpatialIndex('burst_id_map', 'geometry');
 
 CREATE INDEX idx_burst_id_jpl on {table_name} (burst_id_jpl);
 
@@ -117,9 +119,26 @@ def run_cli():
         help="Path to the output database",
     )
     parser.add_argument(
+        "--snap",
+        type=float,
+        default=50.0,
+        help="Snap the bounding box to the nearest multiple of this value.",
+    )
+    parser.add_argument(
+        "--margin",
+        type=float,
+        default=1000.0,
+        help="Add this margin surrounding the bounding box of bursts.",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         help="For testing, limit the number of rows to process",
+    )
+    parser.add_argument(
+        "--max-procs",
+        type=int,
+        help="Max CPU count to use for processing geometries",
     )
     args = parser.parse_args()
     return args
@@ -136,7 +155,9 @@ if __name__ == "__main__":
     df = read_esa_db(esa_db_path=args.esa_db_path, limit=args.limit)
 
     t1 = time.time()
-    make_jpl_burst_db(df, args.output_path, table_name="burst_id_map")
+    make_jpl_burst_db(
+        df, args.output_path, table_name="burst_id_map", max_procs=args.max_procs
+    )
     print(f"Created DB {args.output_path} in {time.time() - t1:.2f} seconds")
 
     print(f"Total script time: {time.time() - t0:.2f} seconds")

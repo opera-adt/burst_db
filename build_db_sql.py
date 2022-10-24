@@ -12,6 +12,8 @@ from multiprocessing import Pool, cpu_count
 import pandas as pd
 from shapely import ops, wkb
 
+import utils as ut
+
 ESA_DB_PATH = "burst_map_IW_000001_375887.sqlite3"
 ESA_DB_URL = "https://sar-mpc.eu/files/S1_burstid_20220530.zip"
 
@@ -40,21 +42,13 @@ def convert_wkb_to_2d(
 
     return df
 
-
-def to_2d(shape):
-    return ops.transform(lambda *args: args[:2], shape)
-
-
-def _convert_wkb_to_2d(b):
-    return wkb.dumps(to_2d(wkb.loads(b)))
-
-
 def _convert_wkb_to_2d_parallel(wkb_series):
     workers = min(25, cpu_count())
+    # return list(map(_convert_wkb_to_2d, wkb_series))
     print(f"Using {workers} workers to convert wkb to 2d")
     with Pool(workers) as p:
         # print(p.map(f, [1, 2, 3]))
-        return list(p.map(_convert_wkb_to_2d, wkb_series))
+        return list(p.map(ut._convert_wkb_to_2d, wkb_series))
 
 
 def make_jpl_burst_db(df, db_path, table_name="burst_id_map"):

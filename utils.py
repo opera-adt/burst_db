@@ -3,6 +3,7 @@ from multiprocessing import Pool, cpu_count
 import numpy as np
 from pyproj import Transformer
 from shapely import ops, wkb
+from itertools import repeat
 
 TRANSFORMERS = {}
 
@@ -56,7 +57,7 @@ def _process_geom(geom_wkb, snap=50.0, margin=1000.0):
     return wkb.dumps(geom_2d), epsg, *bbox
 
 
-def process_geom_parallel(wkb_series):
+def process_geom_parallel(wkb_series, max_procs=30, snap=50.0, margin=1000.0):
     """Loop through the burst geometries and find the EPSG/bounding boxes.
 
     Consists of 3 parts:
@@ -68,6 +69,16 @@ def process_geom_parallel(wkb_series):
     ----------
     wkb_series : Iterable[bytes]
         Iterable of WKB geometries
+    max_procs : int, optional
+        Maximum number of processes to use.
+        By default 30, or the number of CPUs, whichever is lower.
+    snap : float, optional
+        Snap the bounding box to the nearest multiple of this value.
+        By default 50.0 meters.
+    margin : float, optional
+        Add this margin to the bounding box.
+        By default 1000.0 meters.
+
 
     Returns
     -------
@@ -78,20 +89,14 @@ def process_geom_parallel(wkb_series):
     bboxes : List[Tuple[float]]
         List of bounding boxes
     """
-    workers = min(25, cpu_count())
+    workers = min(max_procs, cpu_count())
     # return list(map(_process_geom, wkb_series))
-    print(f"Using {workers} workers to process geometries")
+    print(f"Using {workers} cores to process geometries")
     with Pool(workers) as p:
-        return list(p.map(_process_geom, wkb_series))
-
-
-def _convert_wkb_to_2d_parallel(wkb_series):
-    workers = min(25, cpu_count())
-    # return list(map(_convert_wkb_to_2d, wkb_series))
-    print(f"Using {workers} workers to convert wkb to 2d")
-    with Pool(workers) as p:
-        # print(p.map(f, [1, 2, 3]))
-        return list(p.map(_convert_wkb_to_2d, wkb_series))
+        # passing through kwargs is annoying
+        return list(
+            p.map(_process_geom, wkb_series, snap=repeat(snap), margin=repeat(margin))
+        )
 
 
 def snap_bbox(bbox, margin=1000, snap=50):
@@ -155,6 +160,6 @@ def make_jpl_burst_id(df):
         + "_"
         + df["burst_id"].astype(str).str.zfill(6)
         + "_"
-        + df["subswath_name"]
+        + df["subswath_name"].str.lower()
     )
     return burst_id_jpl
