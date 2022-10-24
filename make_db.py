@@ -85,7 +85,7 @@ def make_minimal_db(db_path, output_path):
     """Make a minimal database with only the burst_id_jpl, epsg, and bbox columns."""
     with sqlite3.connect(db_path) as con:
         df = pd.read_sql_query(
-            "SELECT burst_id_jpl, espg, xmin, ymin, xmax, ymax FROM burst_id_map", con
+            "SELECT burst_id_jpl, epsg, xmin, ymin, xmax, ymax FROM burst_id_map", con
         )
 
     with sqlite3.connect(output_path) as con:
