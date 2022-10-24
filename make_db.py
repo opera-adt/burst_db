@@ -81,6 +81,18 @@ COMMIT;
         con.execute("VACUUM;")
 
 
+def make_minimal_db(db_path, output_path):
+    """Make a minimal database with only the burst_id_jpl, epsg, and bbox columns."""
+    with sqlite3.connect(db_path) as con:
+        df = pd.read_sql_query(
+            "SELECT burst_id_jpl, espg, xmin, ymin, xmax, ymax FROM burst_id_map", con
+        )
+
+    with sqlite3.connect(output_path) as con:
+        df.to_sql("burst_id_map", con, if_exists="replace", index=False)
+        con.execute("CREATE INDEX idx_burst_id_jpl on burst_id_map (burst_id_jpl);")
+
+
 def get_esa_burst_db(output_path="esa_burst_map.sqlite3"):
     """Download the ESA burst database and convert to 2D."""
     # Download the ESA burst database
@@ -163,5 +175,9 @@ if __name__ == "__main__":
         df, args.output_path, table_name="burst_id_map", max_procs=args.max_procs
     )
     print(f"Created DB {args.output_path} in {time.time() - t1:.2f} seconds")
+    
+    print("Creating a epsg/bbox only version of database")
+    ext = os.path.splitext(args.output_path)[1]
+    make_minimal_db(args.output_path, args.output_path.replace(ext, f"_bbox_only{ext}"))
 
     print(f"Total script time: {time.time() - t0:.2f} seconds")
