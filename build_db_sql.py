@@ -64,6 +64,7 @@ def make_jpl_burst_db(df, db_path, table_name="burst_id_map"):
     sql = f"""
 BEGIN;
 SELECT InitSpatialMetaData();
+CREATE INDEX idx_OGC_FID on {table_name} (OGC_FID);
 
 SELECT AddGeometryColumn('{table_name}', 'geometry', 4326, 'MULTIPOLYGON', 'XY');
 UPDATE {table_name} SET geometry=GeomFromWKB(geometry_wkb, 4326);
@@ -71,20 +72,23 @@ UPDATE {table_name} SET geometry=GeomFromWKB(geometry_wkb, 4326);
 ALTER TABLE {table_name} ADD epsg INTEGER;
 
 -- Get the centroid of the geometry, use to find epsg code
-WITH latlon(lat, lon) AS
+WITH latlon AS
 (
-    SELECT Y(Centroid(geometry)), X(Centroid(geometry)) FROM {table_name}
+    SELECT Y(Centroid(geometry)) as lat,
+           X(Centroid(geometry)) as lon, 
+           OGC_FID 
+    FROM {table_name}
 )
 UPDATE {table_name}
-SET epsg = 
-    CASE
-        WHEN lat >= 75   THEN 3413
-        WHEN lat <= -60  THEN 3031
-        WHEN lat > 0     THEN 32601 + CAST(ROUND((lon + 177) / 6, 0) AS INTEGER)
-        ELSE                  32701 + CAST(ROUND((lon + 177) / 6, 0) AS INTEGER)
-    END
-    FROM latlon
-;
+SET epsg =
+CASE
+    WHEN lat >= 75   THEN 3413
+    WHEN lat <= -60  THEN 3031
+    WHEN lat > 0     THEN 32601 + CAST(ROUND((lon + 177) / 6, 0) AS INTEGER)
+    ELSE                  32701 + CAST(ROUND((lon + 177) / 6, 0) AS INTEGER)
+END
+FROM latlon
+WHERE {table_name}.OGC_FID = latlon.OGC_FID;
 
 -- Columns for the bounding box limits in UTM
 ALTER TABLE {table_name} ADD xmin FLOAT;
@@ -93,16 +97,18 @@ ALTER TABLE {table_name} ADD xmax FLOAT;
 ALTER TABLE {table_name} ADD ymax FLOAT;
 
 -- Get the bounding box and save the limits
-WITH bboxes(bb) AS (
-    SELECT envelope(transform(geometry, epsg)) as bb
+WITH bboxes AS (
+    SELECT envelope(transform(geometry, epsg)) as bb,
+    OGC_FID
     FROM {table_name}
 )
-UPDATE {table_name} SET (xmin, ymin, xmax, ymax) = 
+UPDATE {table_name} SET (xmin, ymin, xmax, ymax) = (
     Round((ST_MinX(bb) - 1000) / 50.0) * 50.0,
     Round((ST_MinY(bb) - 1000) / 50.0) * 50.0,
     Round((ST_MaxX(bb) + 1000) / 50.0) * 50.0,
     Round((ST_MaxY(bb) + 1000) / 50.0) * 50.0
-FROM bboxes
+)
+FROM bboxes where bboxes.OGC_FID = {table_name}.OGC_FID;
 ;
 
 -- Add the jpl burst id by concatenating the burst/track/subswath info
@@ -110,16 +116,15 @@ ALTER TABLE burst_id_map ADD COLUMN burst_id_jpl VARCHAR(16);
 UPDATE {table_name} SET burst_id_jpl =
     't' || printf('%03d', relative_orbit_number) || '_'
                || printf('%06d', burst_id) || '_'
-               || lower(subswath_name) from burst_id_map
-;
+               || lower(subswath_name);
 
 CREATE INDEX idx_burst_id_jpl on {table_name} (burst_id_jpl);
 
 -- Drop unnecessary columns
 ALTER TABLE {table_name} DROP COLUMN geometry_wkb;
 -- These two are part of the burst_id_jpl
--- ALTER TABLE {table_name} DROP COLUMN burst_id;
--- ALTER TABLE {table_name} DROP COLUMN subswath_name;
+ALTER TABLE {table_name} DROP COLUMN burst_id;
+ALTER TABLE {table_name} DROP COLUMN subswath_name;
 
 COMMIT;
 """
