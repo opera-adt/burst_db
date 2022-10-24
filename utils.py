@@ -4,6 +4,7 @@ import numpy as np
 from pyproj import Transformer
 from shapely import ops, wkb
 from itertools import repeat
+from functools import partial
 
 TRANSFORMERS = {}
 
@@ -92,10 +93,14 @@ def process_geom_parallel(wkb_series, max_procs=30, snap=50.0, margin=1000.0):
     workers = min(max_procs, cpu_count())
     # return list(map(_process_geom, wkb_series))
     print(f"Using {workers} cores to process geometries")
+    func = partial(_process_geom, snap=snap, margin=margin)
     with Pool(workers) as p:
         # passing through kwargs is annoying
         return list(
-            p.map(_process_geom, wkb_series, snap=repeat(snap), margin=repeat(margin))
+            p.map(
+                func,
+                wkb_series,
+            )
         )
 
 
