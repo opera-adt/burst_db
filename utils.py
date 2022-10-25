@@ -1,10 +1,9 @@
+from functools import partial
 from multiprocessing import Pool, cpu_count
 
 import numpy as np
 from pyproj import Transformer
 from shapely import ops, wkb
-from itertools import repeat
-from functools import partial
 
 TRANSFORMERS = {}
 
@@ -114,10 +113,10 @@ def snap_bbox(bbox, margin=1000, snap=50):
         ymax += margin
 
     if snap > 0:
-        xmin = np.round(xmin / snap) * snap
-        xmax = np.round(xmax / snap) * snap
-        ymin = np.round(ymin / snap) * snap
-        ymax = np.round(ymax / snap) * snap
+        xmin = np.floor(xmin / snap) * snap
+        xmax = np.ceil(xmax / snap) * snap
+        ymin = np.floor(ymin / snap) * snap
+        ymax = np.ceil(ymax / snap) * snap
 
     return (xmin, ymin, xmax, ymax)
 
