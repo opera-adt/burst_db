@@ -172,13 +172,18 @@ if __name__ == "__main__":
 
     t1 = time.time()
     make_jpl_burst_db(
-        df, args.output_path, table_name="burst_id_map", max_procs=args.max_procs
+        df,
+        args.output_path,
+        table_name="burst_id_map",
+        max_procs=args.max_procs,
+        margin=args.margin,
+        snap=args.snap,
     )
     print(f"Created DB {args.output_path} in {time.time() - t1:.2f} seconds")
-    
+
     ext = os.path.splitext(args.output_path)[1]
-    out_minimal = args.output_path.replace(ext, f"_bbox_only{ext}"
+    out_minimal = args.output_path.replace(ext, f"_bbox_only{ext}")
     print(f"Creating a epsg/bbox only version: {out_minimal}")
-    make_minimal_db(args.output_path, out_minimal))
+    make_minimal_db(args.output_path, out_minimal)
 
     print(f"Total script time: {time.time() - t0:.2f} seconds")
