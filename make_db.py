@@ -37,7 +37,7 @@ def read_esa_db(
 
 
 def make_jpl_burst_db(
-    df, db_path, table_name="burst_id_map", max_procs=None, snap=50.0, margin=1000.0
+    df, db_path, table_name="burst_id_map", max_procs=None, snap=50.0, margin=4000.0
 ):
     print("Creating JPL burst ID")
     df["burst_id_jpl"] = ut.make_jpl_burst_id(df)
@@ -143,7 +143,7 @@ def run_cli():
     parser.add_argument(
         "--margin",
         type=float,
-        default=1000.0,
+        default=4000.0,
         help="Add this margin surrounding the bounding box of bursts.",
     )
     parser.add_argument(
