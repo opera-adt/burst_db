@@ -176,8 +176,9 @@ if __name__ == "__main__":
     )
     print(f"Created DB {args.output_path} in {time.time() - t1:.2f} seconds")
     
-    print("Creating a epsg/bbox only version of database")
     ext = os.path.splitext(args.output_path)[1]
-    make_minimal_db(args.output_path, args.output_path.replace(ext, f"_bbox_only{ext}"))
+    out_minimal = args.output_path.replace(ext, f"_bbox_only{ext}"
+    print(f"Creating a epsg/bbox only version: {out_minimal}")
+    make_minimal_db(args.output_path, out_minimal))
 
     print(f"Total script time: {time.time() - t0:.2f} seconds")
