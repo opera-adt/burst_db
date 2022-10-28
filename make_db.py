@@ -51,9 +51,7 @@ def make_jpl_burst_db(
     print(f"Processed {len(df)} geometries in {time.time() - t:.2f} seconds")
 
     with sqlite3.connect(db_path) as con:
-        df.drop(["burst_id", "subswath_name"], axis=1).to_sql(
-            table_name, con, if_exists="replace", index=False
-        )
+        df.to_sql(table_name, con, if_exists="replace", index=False)
 
     print("Creating spatialite tables and geometry")
     sql = f"""
