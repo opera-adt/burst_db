@@ -113,10 +113,10 @@ def snap_bbox(bbox, margin=1000, snap=50):
         ymax += margin
 
     if snap > 0:
-        xmin = np.floor(xmin / snap) * snap
-        xmax = np.ceil(xmax / snap) * snap
-        ymin = np.floor(ymin / snap) * snap
-        ymax = np.ceil(ymax / snap) * snap
+        xmin = int(np.floor(xmin / snap) * snap)
+        xmax = int(np.ceil(xmax / snap) * snap)
+        ymin = int(np.floor(ymin / snap) * snap)
+        ymax = int(np.ceil(ymax / snap) * snap)
 
     return (xmin, ymin, xmax, ymax)
 

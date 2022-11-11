@@ -86,6 +86,11 @@ def make_minimal_db(db_path, output_path):
         df = pd.read_sql_query(
             "SELECT burst_id_jpl, epsg, xmin, ymin, xmax, ymax FROM burst_id_map", con
         )
+    # Make sure snapped coordinates as integers (~40% smaller than REAL)
+    df["xmin"] = df["xmin"].astype(int)
+    df["ymin"] = df["ymin"].astype(int)
+    df["xmax"] = df["xmax"].astype(int)
+    df["ymax"] = df["ymax"].astype(int)
 
     with sqlite3.connect(output_path) as con:
         df.to_sql("burst_id_map", con, if_exists="replace", index=False)
