@@ -30,8 +30,8 @@ if __name__=='__main__':
 
     MARGIN_X = 1000.0
     MARGIN_Y = 1000.0
-    SNAP_X = 50.0
-    SNAP_Y = 50.0
+    SNAP_X = 30.0
+    SNAP_Y = 30.0
 
     # Make a copy of the original ESA burst map data; Play with the duplicate.
     shutil.copy(PATH_DATABASE_SRC, PATH_DATABASE_DST)
