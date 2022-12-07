@@ -33,6 +33,11 @@ if __name__=='__main__':
     SNAP_X = 30.0
     SNAP_Y = 30.0
 
+    # other flag
+    export_db_for_opera = True
+    # Flag to choose to add bursts' center (approximated from bounding boxes' center) and area of the bounding box
+    verbose_database = False
+
     # Make a copy of the original ESA burst map data; Play with the duplicate.
     shutil.copy(PATH_DATABASE_SRC, PATH_DATABASE_DST)
 
@@ -43,10 +48,15 @@ if __name__=='__main__':
     # Add additional columns to the table
     cur.execute('ALTER TABLE burst_id_map ADD COLUMN burst_id_jpl text')
     cur.execute('ALTER TABLE burst_id_map ADD COLUMN EPSG integer')
-    cur.execute('ALTER TABLE burst_id_map ADD COLUMN xmin float')
-    cur.execute('ALTER TABLE burst_id_map ADD COLUMN xmax float')
-    cur.execute('ALTER TABLE burst_id_map ADD COLUMN ymin float')
-    cur.execute('ALTER TABLE burst_id_map ADD COLUMN ymax float')
+    cur.execute('ALTER TABLE burst_id_map ADD COLUMN xmin integer')
+    cur.execute('ALTER TABLE burst_id_map ADD COLUMN xmax integer')
+    cur.execute('ALTER TABLE burst_id_map ADD COLUMN ymin integer')
+    cur.execute('ALTER TABLE burst_id_map ADD COLUMN ymax integer')
+
+    #cur.execute('ALTER TABLE burst_id_map ADD COLUMN xmin float')
+    #cur.execute('ALTER TABLE burst_id_map ADD COLUMN xmax float')
+    #cur.execute('ALTER TABLE burst_id_map ADD COLUMN ymin float')
+    #cur.execute('ALTER TABLE burst_id_map ADD COLUMN ymax float')
 
     cur.execute('CREATE INDEX index_burst ON burst_id_map '\
                 '(relative_orbit_number, burst_id, subswath_name)')
@@ -116,7 +126,6 @@ if __name__=='__main__':
             conn.commit()
 
     conn.commit()
-
     print('\n Calculating bounding box')
     # Calculate bounding box for every row
     srs_in = osr.SpatialReference()
@@ -149,10 +158,10 @@ if __name__=='__main__':
         dict_geom_tformed = json.loads(geom_burst.ExportToJson())
         envelope_geom_tformed = geom_burst.GetEnvelope()
 
-        xmin = np.round((envelope_geom_tformed[0] - MARGIN_X) / SNAP_X) * SNAP_X
-        xmax = np.round((envelope_geom_tformed[1] + MARGIN_X) / SNAP_X) * SNAP_X
-        ymin = np.round((envelope_geom_tformed[2] - MARGIN_Y) / SNAP_Y) * SNAP_Y
-        ymax = np.round((envelope_geom_tformed[3] + MARGIN_Y) / SNAP_Y) * SNAP_Y
+        xmin = int(np.round((envelope_geom_tformed[0] - MARGIN_X) / SNAP_X) * SNAP_X)
+        xmax = int(np.round((envelope_geom_tformed[1] + MARGIN_X) / SNAP_X) * SNAP_X)
+        ymin = int(np.round((envelope_geom_tformed[2] - MARGIN_Y) / SNAP_Y) * SNAP_Y)
+        ymax = int(np.round((envelope_geom_tformed[3] + MARGIN_Y) / SNAP_Y) * SNAP_Y)
 
         str_sql = f'UPDATE  burst_id_map SET '\
                   f'xmin={xmin}, xmax={xmax}, ymin={ymin}, ymax={ymax} WHERE '\
