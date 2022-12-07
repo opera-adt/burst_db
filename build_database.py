@@ -413,7 +413,7 @@ def export_to_json(records_out: list, path_json_out: str):
         json.dump(dict_export, fout, indent=2)
 
 
-def export_to_sqlite(records_out: list, path_sqlite_out: str):
+def export_to_sqlite(records_out: list, path_sqlite_out: str, create_index: bool=False):
     '''
     Write out the burst geogrid information as sqlite database file
 
@@ -444,9 +444,10 @@ def export_to_sqlite(records_out: list, path_sqlite_out: str):
 
             curs_out.execute(str_sql_command)
         print('\n')
-        curs_out.execute('CREATE INDEX index_burst ON burst (burst_id)')
-        conn_out.commit()
+        if create_index:
+            curs_out.execute('CREATE INDEX index_burst ON burst (burst_id)')
 
+        conn_out.commit()
 
 
 if __name__=='__main__':
