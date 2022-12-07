@@ -89,8 +89,29 @@ def get_list_polygon_wkt(path_shp: str, epsg_out: str) -> dict:
 
     return dict_out
 
+def snap_extent(mimnax_xy: tuple, snap_x: int, snap_y: int) -> tuple :
+    '''Snap the coordinates in the tuple'''
+    # inside tuple: (xmin, ymin, xmax, ymax)
+    # i.e. Same as -te option in gdalwarp
 
-def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap:int=0):
+    if snap_x > 0:
+        xmin_snap = int(np.floor(mimnax_xy[0] / snap_x) * snap_x)
+        xmax_snap = int(np.ceil(mimnax_xy[2] / snap_x) * snap_x)
+    else:
+        xmin_snap = mimnax_xy[0]
+        xmax_snap = mimnax_xy[2]
+
+    if snap_y > 0:
+        ymin_snap = int(np.floor(mimnax_xy[1] / snap_y) * snap_y)
+        ymax_snap = int(np.ceil(mimnax_xy[3] / snap_y) * snap_y)
+    else:
+        ymin_snap = mimnax_xy[1]
+        ymax_snap = mimnax_xy[3]
+
+        return (xmin_snap, ymin_snap, xmax_snap, ymax_snap)
+
+
+def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap_x: int=0, snap_y: int=0):
     '''
     Calculate the extend of the input polygon, with margin applied.
     Performs snapping when snap>0
@@ -142,18 +163,9 @@ def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap:int=0):
     ymin_coord = arr_y.min() - margin_y
     ymax_coord = arr_y.max() + margin_y
 
-    if snap>0:
-        xmin = np.round(xmin_coord / snap) * snap
-        xmax = np.round(xmax_coord / snap) * snap
-        ymin = np.round(ymin_coord / snap) * snap
-        ymax = np.round(ymax_coord / snap) * snap
-    else:
-        xmin = xmin_coord
-        xmax = xmax_coord
-        ymin = ymin_coord
-        ymax = ymax_coord
-
-    extent=[xmin, ymin, xmax, ymax]
+    extent = snap_extent((xmin_coord, ymin_coord,
+                          xmax_coord, ymax_coord),
+                          snap_x, snap_y)
 
     return extent
 
@@ -235,10 +247,11 @@ def generate_shp_out(path_shp_in: str, path_shp_out: str,
         dict_geom_tformed = json.loads(geom.ExportToJson())
         nparr_coord_tformed = np.array(dict_geom_tformed['coordinates'][0])
 
-        xmin = np.round((nparr_coord_tformed[:,0].min() - margin_x) / snap_x) * snap_x
-        xmax = np.round((nparr_coord_tformed[:,0].max() + margin_x) / snap_x) * snap_x
-        ymin = np.round((nparr_coord_tformed[:,1].min() - margin_y) / snap_y) * snap_y
-        ymax = np.round((nparr_coord_tformed[:,1].max() + margin_y) / snap_y) * snap_y
+        tuple_extent = ((nparr_coord_tformed[:,0].min() - margin_x),
+                        (nparr_coord_tformed[:,0].max() + margin_x),
+                        (nparr_coord_tformed[:,1].min() - margin_y),
+                        (nparr_coord_tformed[:,1].max() + margin_y))
+        xmin, xmax, ymin, ymax = snap_extent(tuple_extent, snap_x, snap_y)
 
         feat_out = ogr.Feature(lyr_out.GetLayerDefn())
         feat_out.SetField('burst_id', str_burst_id)
@@ -479,7 +492,7 @@ if __name__=='__main__':
     list_extent = [None] * num_burst
     list_burst_id = [None] * num_burst
     for i_burst, wkt in enumerate(dict_burst_info['wkt']):
-        list_extent[i_burst] = wkt2extent(wkt,MARGIN_X,MARGIN_Y,50)
+        list_extent[i_burst] = wkt2extent(wkt,MARGIN_X, MARGIN_Y, SNAP_X, SNAP_Y)
         list_burst_id[i_burst] = get_burst_id(dict_burst_info['relative_o'][i_burst],
                                         dict_burst_info['burst_id'][i_burst],
                                         dict_burst_info['subswath_n'][i_burst])
