@@ -19,12 +19,12 @@ import build_database as bd
 
 
 if __name__=='__main__':
-    PATH_SRC_ROOT = os.getenv('HOME') + '/Documents/DATA/Sensor/Sentinel-1/S1_burstid_20220530/IW'
+    PATH_SRC_ROOT = os.getenv('HOME') + '/Documents/DATA/burst_db'
     PATH_DST_ROOT = os.path.dirname(__file__)
 
     STR_TIMESTAMP = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
-    PATH_DATABASE_SRC = f'{PATH_SRC_ROOT}/sqlite/burst_map_IW_000001_375887.sqlite3'
+    PATH_DATABASE_SRC = f'{PATH_SRC_ROOT}/burst_map_IW_000001_375887.sqlite3'
     PATH_DATABASE_DST = f'{PATH_DST_ROOT}/data/burst_map_IW_000001_375887.OPERA-JPL.'\
                         f'{STR_TIMESTAMP}.sqlite3'
 
@@ -60,6 +60,7 @@ if __name__=='__main__':
     list_all = query_result_all.fetchall()
     num_all = len(list_all)
 
+    print('Assigning JPL burst ID to all rows')
     for i_row, row in enumerate(list_all):
         print(f'processing: {i_row + 1:,} / {num_all:,}', end='\r')
         track_in = row[col_id['relative_orbit_number']]
@@ -146,12 +147,12 @@ if __name__=='__main__':
 
         geom_burst.Transform(transform)
         dict_geom_tformed = json.loads(geom_burst.ExportToJson())
-        nparr_coord_tformed = np.array(dict_geom_tformed['coordinates'][0][0])
+        envelope_geom_tformed = geom_burst.GetEnvelope()
 
-        xmin = np.round((nparr_coord_tformed[:,0].min() - MARGIN_X) / SNAP_X) * SNAP_X
-        xmax = np.round((nparr_coord_tformed[:,0].max() + MARGIN_X) / SNAP_X) * SNAP_X
-        ymin = np.round((nparr_coord_tformed[:,1].min() - MARGIN_Y) / SNAP_Y) * SNAP_Y
-        ymax = np.round((nparr_coord_tformed[:,1].max() + MARGIN_Y) / SNAP_Y) * SNAP_Y
+        xmin = np.round((envelope_geom_tformed[0] - MARGIN_X) / SNAP_X) * SNAP_X
+        xmax = np.round((envelope_geom_tformed[1] + MARGIN_X) / SNAP_X) * SNAP_X
+        ymin = np.round((envelope_geom_tformed[2] - MARGIN_Y) / SNAP_Y) * SNAP_Y
+        ymax = np.round((envelope_geom_tformed[3] + MARGIN_Y) / SNAP_Y) * SNAP_Y
 
         str_sql = f'UPDATE  burst_id_map SET '\
                   f'xmin={xmin}, xmax={xmax}, ymin={ymin}, ymax={ymax} WHERE '\
