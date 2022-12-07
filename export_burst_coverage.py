@@ -19,12 +19,12 @@ if __name__=='__main__':
                         type=str,
                         help=('Path to the augmented burst map from which '
                               'the burst geogrid will be extracted'))
-    parser.add_argument('path_databse_out',
+    parser.add_argument('path_database_out',
                         type=str,
                         help=('Path to the output database file\n'
                              'Supported format: .csv, .json, .sqlite'))
 
-    args=parser.parse_args()
+    args = parser.parse_args()
 
     if not os.path.exists(args.path_augmented_burstmap):
         raise ValueError('Cannot find the augmented burst map: '
@@ -32,11 +32,11 @@ if __name__=='__main__':
 
     records_burst_data = bd.extract_burst_geogrid_data(args.path_augmented_burstmap)
 
-    if parser.path_database_out.endswith('.csv'):
+    if args.path_database_out.endswith('.csv'):
         bd.export_to_csv(records_burst_data, args.path_database_out)
-    elif parser.path_database_out.endswith('.json'):
+    elif args.path_database_out.endswith('.json'):
         bd.export_to_json(records_burst_data, args.path_database_out)
-    elif (parser.path_database_out.endswith('.sqlite')) or (args.path_database_out.endswith('.sqlite3')):
+    elif (args.path_database_out.endswith('.sqlite')) or (args.path_database_out.endswith('.sqlite3')):
         bd.export_to_sqlite(records_burst_data, args.path_database_out)
     else:
         raise ValueError(f'Output file format was not supported: {args.path_database_out}')
