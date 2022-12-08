@@ -3,18 +3,22 @@ A code to build the database for S1 burst coverage
 The codes in the `__main__` namespace will be deprecated.
 '''
 
+import datetime
 import json
+import os
+from collections import OrderedDict
+
 import sqlite3
-
 import numpy as np
-
 from osgeo import ogr, osr
+
+from burst_db import __version__ as burst_database_version
 
 def get_point_epsg(lat, lon):
     '''
     Get EPSG code based on latitude and longitude
     coordinates of a point
-    Borrowed from geogrid.py in OPERA RTC
+    Copied from geogrid.py in OPERA RTC
 
     Parameters
     ----------
@@ -86,8 +90,27 @@ def get_list_polygon_wkt(path_shp: str, epsg_out: str) -> dict:
 
     return dict_out
 
+
 def snap_extent(mimnax_xy: tuple, snap_x: int, snap_y: int):
-    '''Snap the coordinates in the tuple'''
+    '''
+    Snap the coordinates in the tuple
+
+    Parameters:
+    -----------
+    minmax_xy: tuple
+        The corner coordinates of the bounding box
+        (xmin, ymin, xmax, ymax)
+    snap_x: int
+        Snap value in x coordinates
+    snap_y: int
+        Snap value in y coordinates
+
+    Return:
+    -------
+    _: tuple
+        Snapped value of `minmax_xy`
+
+    '''
     # inside tuple: (xmin, ymin, xmax, ymax)
     # i.e. Same as -te option in gdalwarp
 
@@ -470,3 +493,96 @@ def export_to_sqlite(records_out: list, path_sqlite_out: str, create_index: bool
             curs_out.execute('CREATE INDEX index_burst ON burst_id_map (burst_id_jpl)')
 
         conn_out.commit()
+
+
+def writeout_metadata(sql_path, args):
+    '''
+    Write the metadata (setting, version, creation date, etc.) into db file
+
+    Parameters:
+    -----------
+    sql_path: str
+        Path to the SQLITE database file which the metadata will be writte into
+    args: argparse.Namespace
+        Argument used for generating the OPERA database
+
+    '''
+
+    str_datetime_now = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f')
+    if not os.path.exists(sql_path):
+        raise FileNotFoundError(f'Cannot find SQLITE file: {sql_path}')
+    conn = sqlite3.connect(sql_path)
+    curs = conn.cursor()
+
+    dict_field_datatype = OrderedDict()
+    dict_field_datatype['version'] = ['TEXT', burst_database_version]
+    dict_field_datatype['src_database'] = ['TEXT', os.path.basename(args.sqlite_path_in)]
+    dict_field_datatype['margin_x'] = ['REAL', args.mxy[0]]
+    dict_field_datatype['margin_y'] = ['REAL', args.mxy[1]]
+    dict_field_datatype['snap_x'] = ['INTEGER', args.sxy[0]]
+    dict_field_datatype['snap_y'] = ['INTEGER', args.sxy[1]]
+    dict_field_datatype['datetime_last_mod'] = ['TEXT', str_datetime_now]
+
+    # create the table for metadata inside database
+    query_create_table = 'CREATE TABLE IF NOT EXISTS metadata ('
+    for field_datatype in dict_field_datatype.items():
+        query_create_table += f'{field_datatype[0]} {field_datatype[1][0]}, '
+    query_create_table = query_create_table[:-2] + ');'
+
+    curs.execute(query_create_table)
+
+    # Check if there are any records in the metadata table;
+    # Clean the table if there any
+    curs.execute('SELECT * FROM metadata')
+    rec_out = curs.fetchall()
+    if len(rec_out) > 0:
+        curs.execute('DELETE FROM metadata')
+
+    query_insert = ( 'INSERT INTO metadata '
+                    f'{tuple(dict_field_datatype.keys())} '
+                     'VALUES('.replace('\'',''))
+    for field_item in dict_field_datatype.items():
+        if field_item[1][0] == 'TEXT':
+            query_insert += f'\"{field_item[1][1]}\", '
+        else:
+            query_insert += f'{field_item[1][1]}, '
+    query_insert = query_insert[:-2] + ')'
+
+    curs.execute(query_insert)
+    conn.commit()
+
+    conn.close()
+
+
+def get_metadata(sql_path:str):
+    '''
+    Get the metadata (setting, version, creation date, etc.) from db file as dict
+
+    Parameters:
+    -----------
+    sql_path: str
+        Path to the SQLITE database file which the metadata will be writte into
+    format: argparse.Namespace
+
+    Return:
+    -------
+    dict_out: OrderedDict
+        metadata
+
+    '''
+
+    if not os.path.exists(sql_path):
+        raise FileNotFoundError(f'Cannot find SQLITE file: {sql_path}')
+    conn = sqlite3.connect(sql_path)
+    curs = conn.cursor()
+
+    curs.execute('SELECT * FROM metadata')
+    list_field = [field[0] for field in curs.description]
+    records_out = curs.fetchone()
+
+
+    dict_out = OrderedDict()
+    for i_field, field in enumerate(list_field):
+        dict_out[field] = records_out[i_field]
+
+    return dict_out
