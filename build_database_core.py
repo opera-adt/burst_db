@@ -89,7 +89,7 @@ def get_list_polygon_wkt(path_shp: str, epsg_out: str) -> dict:
 
     return dict_out
 
-def snap_extent(mimnax_xy: tuple, snap_x: int, snap_y: int) -> tuple :
+def snap_extent(mimnax_xy: tuple, snap_x: int, snap_y: int):
     '''Snap the coordinates in the tuple'''
     # inside tuple: (xmin, ymin, xmax, ymax)
     # i.e. Same as -te option in gdalwarp
@@ -108,10 +108,12 @@ def snap_extent(mimnax_xy: tuple, snap_x: int, snap_y: int) -> tuple :
         ymin_snap = mimnax_xy[1]
         ymax_snap = mimnax_xy[3]
 
-        return (xmin_snap, ymin_snap, xmax_snap, ymax_snap)
+    return (xmin_snap, ymin_snap, xmax_snap, ymax_snap)
 
 
-def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap_x: int=0, snap_y: int=0):
+def wkt2extent(str_wkt: str,
+               margin_x: float, margin_y: float,
+               snap_x: int=0, snap_y: int=0):
     '''
     Calculate the extend of the input polygon, with margin applied.
     Performs snapping when snap>0
@@ -125,7 +127,8 @@ def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap_x: int=0, sn
         Margins in x / y coordinates to ba added to the polygon's extent [m]
 
     snap: int
-        Snap interval. The x/y coordinates will be rounded to the multiples to this value.
+        Snap interval. The x/y coordinates will be
+        rounded to the multiples to this value.
 
 
     Return:
@@ -174,7 +177,9 @@ def get_burst_id(track:int, burst:int, swath:str) -> str:
     '''Get the string of burst ID.
     '''
     form_burst_id = 't{TRACK:03d}_{BURST:06d}_{SWATH}'
-    str_burst_id = form_burst_id.format(TRACK=track, BURST=burst, SWATH=swath.lower())
+    str_burst_id = form_burst_id.format(TRACK=track,
+                                        BURST=burst,
+                                        SWATH=swath.lower())
 
     return str_burst_id
 
@@ -261,7 +266,8 @@ def generate_shp_out(path_shp_in: str, path_shp_out: str,
         feat_out.SetField('xmax', xmax)
         feat_out.SetField('ymin', ymin)
         feat_out.SetField('ymax', ymax)
-        feat_out.SetGeometry(ogr.CreateGeometryFromWkt(wkt_polygon_before_transform))
+        feat_out.SetGeometry(
+            ogr.CreateGeometryFromWkt(wkt_polygon_before_transform))
 
         lyr_out.CreateFeature(feat_out)
 
@@ -314,14 +320,16 @@ def get_centroid_multipolygon(geometry_in):
             geom_sub_polygon = ogr.CreateGeometryFromJson(json_sub_polygon)
 
             centroid_sub_polygon = geom_sub_polygon.Centroid()
-            dict_centroid_sub_polygon = json.loads(centroid_sub_polygon.ExportToJson())
+            dict_centroid_sub_polygon = json.loads(
+                                            centroid_sub_polygon.ExportToJson())
             x_centroid = dict_centroid_sub_polygon['coordinates'][0]
             y_centroid = dict_centroid_sub_polygon['coordinates'][1]
             area_sub_polygon = geom_sub_polygon.Area()
 
-            xy_weight_centroid[id_polygon,:] = [(x_centroid + offset_circular) % offset_circular,
-                                                y_centroid,
-                                                area_sub_polygon]
+            xy_weight_centroid[id_polygon,:] = [
+                (x_centroid + offset_circular) % offset_circular,
+                y_centroid,
+                area_sub_polygon]
 
         # Weighted sum
         x_centroid_weighted_raw = \
@@ -349,8 +357,6 @@ def get_centroid_multipolygon(geometry_in):
     return x_centroid, y_centroid
 
 
-# Export the (full) database into deployable smaller version
-# (i.e burst_id_jpl EPSG, and bounding box only)
 def extract_burst_geogrid_data(path_augmented_burst_map: str):
     '''
     Extract the burst geogrid data from augmented burst map
@@ -368,7 +374,8 @@ def extract_burst_geogrid_data(path_augmented_burst_map: str):
 
     conn = sqlite3.connect(path_augmented_burst_map)
     curs = conn.cursor()
-    curs.execute('SELECT burst_id_jpl, EPSG, xmin, ymin, xmax, ymax FROM burst_id_map')
+    curs.execute('SELECT burst_id_jpl, EPSG, xmin, ymin, xmax, ymax '
+                 'FROM burst_id_map')
     records_out = curs.fetchall()
 
     curs.close()
@@ -383,7 +390,8 @@ def export_to_csv(records_out: list, path_csv_out: str):
 
     Parameters:
         records_out: list
-            List of burst geogrid information retrieved from `extract_burst_geogrid_data()`
+            List of burst geogrid information retrieved from
+            `extract_burst_geogrid_data()`
         path_csv_out: str
             path to the .csv file to write out
 
@@ -406,11 +414,13 @@ def export_to_json(records_out: list, path_json_out: str):
 
     Parameters:
         records_out: list
-            List of burst geogrid information retrieved from `extract_burst_geogrid_data()`
+            List of burst geogrid information retrieved from
+            `extract_burst_geogrid_data()`
         path_json_out: str
             path to the .json file to write out
 
     '''
+
     num_record = len(records_out)
 
     # Convert the data into dict
@@ -432,7 +442,8 @@ def export_to_sqlite(records_out: list, path_sqlite_out: str, create_index: bool
 
     Parameters:
         records_out: list
-            List of burst geogrid information retrieved from `extract_burst_geogrid_data()`
+            List of burst geogrid information retrieved from
+            `extract_burst_geogrid_data()`
         path_sqlite_out: str
             path to the .sqlite file to write out
 
@@ -444,103 +455,21 @@ def export_to_sqlite(records_out: list, path_sqlite_out: str, create_index: bool
     print('Exporting to SQLITE')
     with sqlite3.connect(path_sqlite_out) as conn_out:
         curs_out = conn_out.cursor()
-        curs_out.execute('CREATE TABLE IF NOT EXISTS burst ('
-                         'burst_id text PRIMARY KEY, EPSG integer, '
-                         'xmin float, ymin float, xmax float, ymax float);')
+        curs_out.execute('CREATE TABLE IF NOT EXISTS burst_id_map ('
+                         'burst_id_jpl text PRIMARY KEY, EPSG integer, '
+                         'xmin integer, ymin integer, xmax integer, ymax integer);')
 
         for i_record, record in enumerate(records_out):
             print(f' Processing: {i_record:,} / {num_record:,}      ', end='\r')
-            str_sql_command=f'INSERT INTO burst (burst_id ,EPSG, xmin, ymin, xmax, ymax) '\
-                            f'VALUES("{record[0]}", {record[1]}, '\
-                            f'{record[2]}, {record[3]}, '\
-                            f'{record[4]}, {record[5]})'
+            str_sql_command = ( 'INSERT INTO burst_id_map '
+                                '(burst_id_jpl ,EPSG, xmin, ymin, xmax, ymax) '
+                               f'VALUES("{record[0]}", {record[1]}, '
+                               f'{record[2]}, {record[3]}, '
+                               f'{record[4]}, {record[5]})')
 
             curs_out.execute(str_sql_command)
         print('\n')
         if create_index:
-            curs_out.execute('CREATE INDEX index_burst ON burst (burst_id)')
+            curs_out.execute('CREATE INDEX index_burst ON burst_id_map (burst_id_jpl)')
 
         conn_out.commit()
-
-
-if __name__=='__main__':
-    # Burst ID, projection, xmin, ymin, xmax, ymax
-    STR_TIMESTAMP = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    PATH_TOP = os.path.dirname(__file__)
-
-    SHP_IN = f'{PATH_TOP}/data/Burstmap_Lower_US.shp'
-    SHP_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata.shp'\
-              .replace('.shp', f'.{STR_TIMESTAMP}.shp')
-    CSV_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.csv'
-    JSON_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.json'
-    SQLITE_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.sqlite3'
-
-    # epsg=4326
-    # epsg=102003 #USA Contiguous Albers Equal Area Conic - Causes an error when using it
-    EPSG_DEFAULT = 32610 #UTM 10N
-    MARGIN_X = 1000.0
-    MARGIN_Y = 1000.0
-    SNAP_X = 50.0
-    SNAP_Y = 50.0
-
-    generate_shp_out(SHP_IN, SHP_OUT, MARGIN_X, MARGIN_Y, SNAP_X, SNAP_Y)
-
-    dict_burst_info = get_list_polygon_wkt(SHP_IN, EPSG_DEFAULT)
-
-    num_burst = len(dict_burst_info['wkt'])
-
-    list_extent = [None] * num_burst
-    list_burst_id = [None] * num_burst
-    for i_burst, wkt in enumerate(dict_burst_info['wkt']):
-        list_extent[i_burst] = wkt2extent(wkt,MARGIN_X, MARGIN_Y, SNAP_X, SNAP_Y)
-        list_burst_id[i_burst] = get_burst_id(dict_burst_info['relative_o'][i_burst],
-                                        dict_burst_info['burst_id'][i_burst],
-                                        dict_burst_info['subswath_n'][i_burst])
-
-
-    #Export to CSV
-    list_field_out = ['burst_id','epsg','xmin','ymin','xmax','ymax']
-    with open(CSV_OUT, 'w+', encoding='utf8') as fout:
-        fout.write(', '.join(list_field_out)+'\n')
-
-        for i_burst in range(num_burst):
-            str_line_csv = f'{list_burst_id[i_burst]}, '\
-                           f'{EPSG_DEFAULT}, '\
-                           f'{list_extent[i_burst][0]}, '\
-                           f'{list_extent[i_burst][1]}, '\
-                           f'{list_extent[i_burst][2]}, '\
-                           f'{list_extent[i_burst][3]}\n'
-            fout.write(str_line_csv)
-
-    #Export to json
-    dict_export={}
-    for i in range(num_burst):
-        dict_export[list_burst_id[i]]={
-            'EPSG':EPSG_DEFAULT,
-            'extent':list_extent[i]
-        }
-
-    with open(JSON_OUT, 'w+', encoding='utf8') as fout:
-        json.dump(dict_export, fout, indent=2)
-
-    #export to sqlite
-    with sqlite3.connect(SQLITE_OUT) as conn:
-        cur=conn.cursor()
-        cur.execute('''CREATE TABLE IF NOT EXISTS burst (
-            burst_id text PRIMARY KEY,
-            EPSG integer,
-            xmin float,
-            ymin float,
-            xmax float,
-            ymax float);
-            ''')
-
-        for i_burst in range(num_burst):
-            str_sql_command=f'INSERT INTO burst (burst_id ,EPSG, xmin, ymin, xmax, ymax) '\
-                            f'VALUES("{list_burst_id[i_burst]}", {EPSG_DEFAULT}, '\
-                            f'{list_extent[i_burst][0]}, {list_extent[i_burst][1]}, '\
-                            f'{list_extent[i_burst][2]}, {list_extent[i_burst][3]})'
-
-            cur.execute(str_sql_command)
-        cur.execute('CREATE INDEX index_burst ON burst (burst_id)')
-        conn.commit()
