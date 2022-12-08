@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 '''
-Loads ESA burst map in spatialite3; Writeout the attributes for OPERA project to the database
+Loads ESA burst map in spatialite3; Writeout the attributes for
+OPERA project to the database
 
 Input: ESA Burst map (for IW in spatialize3 format)
-Output: Augmented Burst map (ESA burst map + Burst geogrid information for OPERA)
+Output: Augmented Burst map
+        (ESA burst map + Burst geogrid information for OPERA)
+
 Optional output: Deployable database (EPSG, xmin, ymin, xmax, ymax only)
 '''
 
@@ -36,7 +39,7 @@ def get_args():
 
     parser.add_argument('-mxy',
                         type=float,
-                        default=[5000, 5000],
+                        default=[5000.0, 5000.0],
                         nargs=2,
                         help='x/y margin of the bounding boxes in meters')
 
