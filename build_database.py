@@ -199,7 +199,7 @@ def main(args):
         # de-reference the objects from feature
         transform = None
         srs_out = None
-        
+
         # intermediate commit
         if i_row % 1000 == 0:
             conn.commit()
@@ -221,9 +221,6 @@ def main(args):
     print('\nProcessing completed!')
 
 
-
-
 if __name__=='__main__':
     arg_in = get_args()
-
     main(arg_in)
