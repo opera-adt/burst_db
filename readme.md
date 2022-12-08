@@ -4,6 +4,26 @@ Sentinel-1 Burst Coverage Database for OPERA SAS
 🚨 This toolbox is still in pre-alpha stage and undergoing rapid development. 🚨
 
 ## How to install
+Follow the steps below to install `burst_db` using conda environment.
+
+1. Download source code:
+
+```bash
+git clone https://github.com/opera-adt/burst_db burst_db
+```
+
+2. Install dependencies:
+
+```bash
+conda install -c conda-forge --file burst_db/requirements.txt
+```
+
+3. Install `burst_db` via pip:
+
+```bash
+# run "pip install -e" to install in development mode
+python -m pip install ./burst_db
+```
 
 ## How to use
 `build_database.py` provides CLI to provide the input / output files and settings for the bounding box calculation. Below is the usage of the program.
