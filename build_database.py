@@ -4,20 +4,57 @@ Loads ESA burst map in spatialite3; Writeout the attributes for OPERA project to
 
 Input: ESA Burst map (for IW in spatialize3 format)
 Output: Augmented Burst map (ESA burst map + Burst geogrid information for OPERA)
-
-TODO: Take another look at the docstring above.
+Optional output: Deployable database (EPSG, xmin, ymin, xmax, ymax only)
 '''
+
 import argparse
-import datetime
-import json
 import os
 import shutil
 import sqlite3
 
-import numpy as np
 from osgeo import ogr, osr
 
 import build_database_core as bd
+
+def get_args():
+    '''
+    Parse the arguments and return
+    '''
+
+    parser = argparse.ArgumentParser(
+                description=('Generate burst bounding box DB for OPERA SAS '
+                             'from ESA burstmap'),
+                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    parser.add_argument('sqlite_path_in',
+                        type=str,
+                        help='Path to the source ESA burstmap.')
+
+    parser.add_argument('sqlite_path_out',
+                        type=str,
+                        help='Path to the output sqlite file')
+
+    parser.add_argument('-mxy',
+                        type=float,
+                        default=[5000, 5000],
+                        nargs=2,
+                        help='x/y margin of the bounding boxes in meters')
+
+    parser.add_argument('-sxy',
+                        type=int,
+                        default=[30, 30],
+                        nargs=2,
+                        help='x/y snapping values in meters for bounding boxes')
+
+    parser.add_argument('-d','--deployable',
+                        type=str,
+                        help='(Option) Path to the deployable database')
+
+    args = parser.parse_args()
+
+    return args
+
+
 
 def main(args):
     '''
@@ -140,7 +177,6 @@ def main(args):
         transform = osr.CoordinateTransformation(srs_in, srs_out)
 
         geom_burst.Transform(transform)
-        #dict_geom_tformed = json.loads(geom_burst.ExportToJson())
         envelope_geom_tformed = list(geom_burst.GetEnvelope())
 
         # Apply margin
@@ -153,11 +189,6 @@ def main(args):
                                                 args.sxy[0],
                                                 args.sxy[1])
 
-        #xmin = int(np.round((envelope_geom_tformed[0] - MARGIN_X) / SNAP_X) * SNAP_X)
-        #xmax = int(np.round((envelope_geom_tformed[1] + MARGIN_X) / SNAP_X) * SNAP_X)
-        #ymin = int(np.round((envelope_geom_tformed[2] - MARGIN_Y) / SNAP_Y) * SNAP_Y)
-        #ymax = int(np.round((envelope_geom_tformed[3] + MARGIN_Y) / SNAP_Y) * SNAP_Y)
-
         str_sql = f'UPDATE  burst_id_map SET '\
                   f'xmin={xmin}, xmax={xmax}, ymin={ymin}, ymax={ymax} WHERE '\
                   f'relative_orbit_number={track_in} AND burst_id={burst_id_in_track} AND '\
@@ -168,8 +199,7 @@ def main(args):
         # de-reference the objects from feature
         transform = None
         srs_out = None
-        #nparr_coord_tformed = None
-
+        
         # intermediate commit
         if i_row % 1000 == 0:
             conn.commit()
@@ -194,35 +224,6 @@ def main(args):
 
 
 if __name__=='__main__':
-    parser = argparse.ArgumentParser(
-                description=('Generate burst bounding box DB for OPERA SAS '
-                             'from ESA burstmap'),
-                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    arg_in = get_args()
 
-    parser.add_argument('sqlite_path_in',
-                        type=str,
-                        help='Path to the source ESA burstmap.')
-
-    parser.add_argument('sqlite_path_out',
-                        type=str,
-                        help='Path to the output sqlite file')
-
-    parser.add_argument('-mxy',
-                        type=float,
-                        default=[5000, 5000],
-                        nargs=2,
-                        help='x/y margin of the bounding boxes in meters')
-
-    parser.add_argument('-sxy',
-                        type=int,
-                        default=[30, 30],
-                        nargs=2,
-                        help='x/y snapping values in meters for bounding boxes')
-
-    parser.add_argument('-d','--deployable',
-                        type=str,
-                        help='(Option) Path to the deployable database')
-
-    args = parser.parse_args()
-
-    main(args)
+    main(arg_in)
