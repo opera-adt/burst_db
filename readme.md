@@ -33,6 +33,9 @@ python -m pip install ./burst_db
 - `-mxy` : x / y margin to apply to the bounding box. Default: [5000.0 5000.0]
 - `-sxy` : x / y snap value to ceil/floor the boundaries' coordinates. Default: [30 30]
 - `-d` : (Optional) Smaller version of the DB will be saved to the path `DEPLOYABLE`
+- `sqlite_path_in` : Path to the source SQLite database file for Sentinel-1 burst map released by ESA. The data can be downloaded from [here](https://sar-mpc.eu/files/S1_burstid_20220530.zip).
+- `sqlite_path_out` : Path to the output SQLite database file.
+
 
 ### License
 **Copyright (c) 2022** California Institute of Technology (“Caltech”). U.S. Government
