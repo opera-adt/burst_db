@@ -14,7 +14,7 @@ import sqlite3
 
 from osgeo import ogr, osr
 
-import build_database_core as bd
+import burst_database_core as bd
 
 def get_args():
     '''

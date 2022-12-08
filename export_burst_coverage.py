@@ -5,7 +5,7 @@ A script to export the burst geogrid from the augmented burst map
 '''
 import argparse
 import os
-import build_database_core as bd
+import burst_database_core as bd
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser(

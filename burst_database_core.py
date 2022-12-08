@@ -4,10 +4,7 @@ The codes in the `__main__` namespace will be deprecated.
 '''
 
 import json
-import os
 import sqlite3
-import datetime
-import json
 
 import numpy as np
 
