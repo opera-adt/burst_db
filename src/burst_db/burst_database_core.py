@@ -3,21 +3,22 @@ A code to build the database for S1 burst coverage
 The codes in the `__main__` namespace will be deprecated.
 '''
 
-import json
-import os
-import sqlite3
 import datetime
 import json
+import os
+from collections import OrderedDict
 
+import sqlite3
 import numpy as np
-
 from osgeo import ogr, osr
+
+from burst_db import __version__ as burst_database_version
 
 def get_point_epsg(lat, lon):
     '''
     Get EPSG code based on latitude and longitude
     coordinates of a point
-    Borrowed from geogrid.py in OPERA RTC
+    Copied from geogrid.py in OPERA RTC
 
     Parameters
     ----------
@@ -90,7 +91,49 @@ def get_list_polygon_wkt(path_shp: str, epsg_out: str) -> dict:
     return dict_out
 
 
-def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap:int=0):
+def snap_extent(mimnax_xy: tuple, snap_x: int, snap_y: int):
+    '''
+    Snap the coordinates in the tuple
+
+    Parameters:
+    -----------
+    minmax_xy: tuple
+        The corner coordinates of the bounding box
+        (xmin, ymin, xmax, ymax)
+    snap_x: int
+        Snap value in x coordinates
+    snap_y: int
+        Snap value in y coordinates
+
+    Return:
+    -------
+    _: tuple
+        Snapped value of `minmax_xy`
+
+    '''
+    # inside tuple: (xmin, ymin, xmax, ymax)
+    # i.e. Same as -te option in gdalwarp
+
+    if snap_x > 0:
+        xmin_snap = int(np.floor(mimnax_xy[0] / snap_x) * snap_x)
+        xmax_snap = int(np.ceil(mimnax_xy[2] / snap_x) * snap_x)
+    else:
+        xmin_snap = mimnax_xy[0]
+        xmax_snap = mimnax_xy[2]
+
+    if snap_y > 0:
+        ymin_snap = int(np.floor(mimnax_xy[1] / snap_y) * snap_y)
+        ymax_snap = int(np.ceil(mimnax_xy[3] / snap_y) * snap_y)
+    else:
+        ymin_snap = mimnax_xy[1]
+        ymax_snap = mimnax_xy[3]
+
+    return (xmin_snap, ymin_snap, xmax_snap, ymax_snap)
+
+
+def wkt2extent(str_wkt: str,
+               margin_x: float, margin_y: float,
+               snap_x: int=0, snap_y: int=0):
     '''
     Calculate the extend of the input polygon, with margin applied.
     Performs snapping when snap>0
@@ -104,7 +147,8 @@ def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap:int=0):
         Margins in x / y coordinates to ba added to the polygon's extent [m]
 
     snap: int
-        Snap interval. The x/y coordinates will be rounded to the multiples to this value.
+        Snap interval. The x/y coordinates will be
+        rounded to the multiples to this value.
 
 
     Return:
@@ -142,18 +186,9 @@ def wkt2extent(str_wkt: str, margin_x: float, margin_y: float, snap:int=0):
     ymin_coord = arr_y.min() - margin_y
     ymax_coord = arr_y.max() + margin_y
 
-    if snap>0:
-        xmin = np.round(xmin_coord / snap) * snap
-        xmax = np.round(xmax_coord / snap) * snap
-        ymin = np.round(ymin_coord / snap) * snap
-        ymax = np.round(ymax_coord / snap) * snap
-    else:
-        xmin = xmin_coord
-        xmax = xmax_coord
-        ymin = ymin_coord
-        ymax = ymax_coord
-
-    extent=[xmin, ymin, xmax, ymax]
+    extent = snap_extent((xmin_coord, ymin_coord,
+                          xmax_coord, ymax_coord),
+                          snap_x, snap_y)
 
     return extent
 
@@ -162,7 +197,9 @@ def get_burst_id(track:int, burst:int, swath:str) -> str:
     '''Get the string of burst ID.
     '''
     form_burst_id = 't{TRACK:03d}_{BURST:06d}_{SWATH}'
-    str_burst_id = form_burst_id.format(TRACK=track, BURST=burst, SWATH=swath.lower())
+    str_burst_id = form_burst_id.format(TRACK=track,
+                                        BURST=burst,
+                                        SWATH=swath.lower())
 
     return str_burst_id
 
@@ -235,10 +272,11 @@ def generate_shp_out(path_shp_in: str, path_shp_out: str,
         dict_geom_tformed = json.loads(geom.ExportToJson())
         nparr_coord_tformed = np.array(dict_geom_tformed['coordinates'][0])
 
-        xmin = np.round((nparr_coord_tformed[:,0].min() - margin_x) / snap_x) * snap_x
-        xmax = np.round((nparr_coord_tformed[:,0].max() + margin_x) / snap_x) * snap_x
-        ymin = np.round((nparr_coord_tformed[:,1].min() - margin_y) / snap_y) * snap_y
-        ymax = np.round((nparr_coord_tformed[:,1].max() + margin_y) / snap_y) * snap_y
+        tuple_extent = ((nparr_coord_tformed[:,0].min() - margin_x),
+                        (nparr_coord_tformed[:,0].max() + margin_x),
+                        (nparr_coord_tformed[:,1].min() - margin_y),
+                        (nparr_coord_tformed[:,1].max() + margin_y))
+        xmin, xmax, ymin, ymax = snap_extent(tuple_extent, snap_x, snap_y)
 
         feat_out = ogr.Feature(lyr_out.GetLayerDefn())
         feat_out.SetField('burst_id', str_burst_id)
@@ -248,7 +286,8 @@ def generate_shp_out(path_shp_in: str, path_shp_out: str,
         feat_out.SetField('xmax', xmax)
         feat_out.SetField('ymin', ymin)
         feat_out.SetField('ymax', ymax)
-        feat_out.SetGeometry(ogr.CreateGeometryFromWkt(wkt_polygon_before_transform))
+        feat_out.SetGeometry(
+            ogr.CreateGeometryFromWkt(wkt_polygon_before_transform))
 
         lyr_out.CreateFeature(feat_out)
 
@@ -256,6 +295,7 @@ def generate_shp_out(path_shp_in: str, path_shp_out: str,
         transform = None
 
     datasrc_out = None
+
 
 def get_centroid_multipolygon(geometry_in):
     '''
@@ -300,14 +340,16 @@ def get_centroid_multipolygon(geometry_in):
             geom_sub_polygon = ogr.CreateGeometryFromJson(json_sub_polygon)
 
             centroid_sub_polygon = geom_sub_polygon.Centroid()
-            dict_centroid_sub_polygon = json.loads(centroid_sub_polygon.ExportToJson())
+            dict_centroid_sub_polygon = json.loads(
+                                            centroid_sub_polygon.ExportToJson())
             x_centroid = dict_centroid_sub_polygon['coordinates'][0]
             y_centroid = dict_centroid_sub_polygon['coordinates'][1]
             area_sub_polygon = geom_sub_polygon.Area()
 
-            xy_weight_centroid[id_polygon,:] = [(x_centroid + offset_circular) % offset_circular,
-                                                y_centroid,
-                                                area_sub_polygon]
+            xy_weight_centroid[id_polygon,:] = [
+                (x_centroid + offset_circular) % offset_circular,
+                y_centroid,
+                area_sub_polygon]
 
         # Weighted sum
         x_centroid_weighted_raw = \
@@ -335,87 +377,212 @@ def get_centroid_multipolygon(geometry_in):
     return x_centroid, y_centroid
 
 
+def extract_burst_geogrid_data(path_augmented_burst_map: str):
+    '''
+    Extract the burst geogrid data from augmented burst map
+
+    Parameters:
+    -----------
+    path_augmented_burst_map: str
+        Path to the augmented burt map
+
+    Return:
+    records_out: list
+        Burst geogrid information
+
+    '''
+
+    conn = sqlite3.connect(path_augmented_burst_map)
+    curs = conn.cursor()
+    curs.execute('SELECT burst_id_jpl, EPSG, xmin, ymin, xmax, ymax '
+                 'FROM burst_id_map')
+    records_out = curs.fetchall()
+
+    curs.close()
+    conn.close()
+
+    return records_out
 
 
+def export_to_csv(records_out: list, path_csv_out: str):
+    '''
+    Write out the burst geogrid information as .csv file
 
-if __name__=='__main__':
-    # Burst ID, projection, xmin, ymin, xmax, ymax
-    STR_TIMESTAMP = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    PATH_TOP = os.path.dirname(__file__)
+    Parameters:
+        records_out: list
+            List of burst geogrid information retrieved from
+            `extract_burst_geogrid_data()`
+        path_csv_out: str
+            path to the .csv file to write out
 
-    SHP_IN = f'{PATH_TOP}/data/Burstmap_Lower_US.shp'
-    SHP_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata.shp'\
-              .replace('.shp', f'.{STR_TIMESTAMP}.shp')
-    CSV_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.csv'
-    JSON_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.json'
-    SQLITE_OUT = f'{PATH_TOP}/data/Burst_Coverage_Metadata_{STR_TIMESTAMP}.sqlite3'
+    '''
+    num_record = len(records_out)
+    with open(path_csv_out,'w+',encoding='utf-8') as fout:
+        # write CSV header
+        fout.write('burst_id, EPSG, xmim, ymin, xmax, ymax\n')
 
-    # epsg=4326
-    # epsg=102003 #USA Contiguous Albers Equal Area Conic - Causes an error when using it
-    EPSG_DEFAULT = 32610 #UTM 10N
-    MARGIN_X = 1000.0
-    MARGIN_Y = 1000.0
-    SNAP_X = 50.0
-    SNAP_Y = 50.0
-
-    generate_shp_out(SHP_IN, SHP_OUT, MARGIN_X, MARGIN_Y, SNAP_X, SNAP_Y)
-
-    dict_burst_info = get_list_polygon_wkt(SHP_IN, EPSG_DEFAULT)
-
-    num_burst = len(dict_burst_info['wkt'])
-
-    list_extent = [None] * num_burst
-    list_burst_id = [None] * num_burst
-    for i_burst, wkt in enumerate(dict_burst_info['wkt']):
-        list_extent[i_burst] = wkt2extent(wkt,MARGIN_X,MARGIN_Y,50)
-        list_burst_id[i_burst] = get_burst_id(dict_burst_info['relative_o'][i_burst],
-                                        dict_burst_info['burst_id'][i_burst],
-                                        dict_burst_info['subswath_n'][i_burst])
+        for i_record, record in enumerate(records_out):
+            print(f'Writing: {i_record+1} / {num_record}', end='\r')
+            fout.write(f'{record[0]}, {record[1]}, {record[2]}, ',
+                    f'{record[3]}, {record[4]}, {record[5]}\n' )
+        print('\n')
 
 
-    #Export to CSV
-    list_field_out = ['burst_id','epsg','xmin','ymin','xmax','ymax']
-    with open(CSV_OUT, 'w+', encoding='utf8') as fout:
-        fout.write(', '.join(list_field_out)+'\n')
+def export_to_json(records_out: list, path_json_out: str):
+    '''
+    Write out the burst geogrid information as .json file
 
-        for i_burst in range(num_burst):
-            str_line_csv = f'{list_burst_id[i_burst]}, '\
-                           f'{EPSG_DEFAULT}, '\
-                           f'{list_extent[i_burst][0]}, '\
-                           f'{list_extent[i_burst][1]}, '\
-                           f'{list_extent[i_burst][2]}, '\
-                           f'{list_extent[i_burst][3]}\n'
-            fout.write(str_line_csv)
+    Parameters:
+        records_out: list
+            List of burst geogrid information retrieved from
+            `extract_burst_geogrid_data()`
+        path_json_out: str
+            path to the .json file to write out
 
-    #Export to json
+    '''
+
+    num_record = len(records_out)
+
+    # Convert the data into dict
     dict_export={}
-    for i in range(num_burst):
-        dict_export[list_burst_id[i]]={
-            'EPSG':EPSG_DEFAULT,
-            'extent':list_extent[i]
+    for i_record in range(num_record):
+        dict_export[records_out[i_record][0]] = {
+            'EPSG':records_out[i_record][1],
+            'extent':[records_out[i_record][2], records_out[i_record][3],
+                    records_out[i_record][4], records_out[i_record][5]]
         }
 
-    with open(JSON_OUT, 'w+', encoding='utf8') as fout:
+    with open(path_json_out, 'w+', encoding='utf8') as fout:
         json.dump(dict_export, fout, indent=2)
 
-    #export to sqlite
-    with sqlite3.connect(SQLITE_OUT) as conn:
-        cur=conn.cursor()
-        cur.execute('''CREATE TABLE IF NOT EXISTS burst (
-            burst_id text PRIMARY KEY,
-            EPSG integer,
-            xmin float,
-            ymin float,
-            xmax float,
-            ymax float);
-            ''')
 
-        for i_burst in range(num_burst):
-            str_sql_command=f'INSERT INTO burst (burst_id ,EPSG, xmin, ymin, xmax, ymax) '\
-                            f'VALUES("{list_burst_id[i_burst]}", {EPSG_DEFAULT}, '\
-                            f'{list_extent[i_burst][0]}, {list_extent[i_burst][1]}, '\
-                            f'{list_extent[i_burst][2]}, {list_extent[i_burst][3]})'
+def export_to_sqlite(records_out: list, path_sqlite_out: str, create_index: bool=False):
+    '''
+    Write out the burst geogrid information as sqlite database file
 
-            cur.execute(str_sql_command)
-        cur.execute('CREATE INDEX index_burst ON burst (burst_id)')
-        conn.commit()
+    Parameters:
+        records_out: list
+            List of burst geogrid information retrieved from
+            `extract_burst_geogrid_data()`
+        path_sqlite_out: str
+            path to the .sqlite file to write out
+
+    '''
+
+    num_record = len(records_out)
+
+    # Export to SQLITE
+    print('Exporting to SQLITE')
+    with sqlite3.connect(path_sqlite_out) as conn_out:
+        curs_out = conn_out.cursor()
+        curs_out.execute('CREATE TABLE IF NOT EXISTS burst_id_map ('
+                         'burst_id_jpl text PRIMARY KEY, EPSG integer, '
+                         'xmin integer, ymin integer, xmax integer, ymax integer);')
+
+        for i_record, record in enumerate(records_out):
+            print(f' Processing: {i_record:,} / {num_record:,}      ', end='\r')
+            str_sql_command = ( 'INSERT INTO burst_id_map '
+                                '(burst_id_jpl ,EPSG, xmin, ymin, xmax, ymax) '
+                               f'VALUES("{record[0]}", {record[1]}, '
+                               f'{record[2]}, {record[3]}, '
+                               f'{record[4]}, {record[5]})')
+
+            curs_out.execute(str_sql_command)
+        print('\n')
+        if create_index:
+            curs_out.execute('CREATE INDEX index_burst ON burst_id_map (burst_id_jpl)')
+
+        conn_out.commit()
+
+
+def writeout_metadata(sql_path, args):
+    '''
+    Write the metadata (setting, version, creation date, etc.) into db file
+
+    Parameters:
+    -----------
+    sql_path: str
+        Path to the SQLITE database file which the metadata will be writte into
+    args: argparse.Namespace
+        Argument used for generating the OPERA database
+
+    '''
+
+    str_datetime_now = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f')
+    if not os.path.exists(sql_path):
+        raise FileNotFoundError(f'Cannot find SQLITE file: {sql_path}')
+    conn = sqlite3.connect(sql_path)
+    curs = conn.cursor()
+
+    dict_field_datatype = OrderedDict()
+    dict_field_datatype['version'] = ['TEXT', burst_database_version]
+    dict_field_datatype['src_database'] = ['TEXT', os.path.basename(args.sqlite_path_in)]
+    dict_field_datatype['margin_x'] = ['REAL', args.mxy[0]]
+    dict_field_datatype['margin_y'] = ['REAL', args.mxy[1]]
+    dict_field_datatype['snap_x'] = ['INTEGER', args.sxy[0]]
+    dict_field_datatype['snap_y'] = ['INTEGER', args.sxy[1]]
+    dict_field_datatype['datetime_last_mod'] = ['TEXT', str_datetime_now]
+
+    # create the table for metadata inside database
+    query_create_table = 'CREATE TABLE IF NOT EXISTS metadata ('
+    for field_datatype in dict_field_datatype.items():
+        query_create_table += f'{field_datatype[0]} {field_datatype[1][0]}, '
+    query_create_table = query_create_table[:-2] + ');'
+
+    curs.execute(query_create_table)
+
+    # Check if there are any records in the metadata table;
+    # Clean the table if there any
+    curs.execute('SELECT * FROM metadata')
+    rec_out = curs.fetchall()
+    if len(rec_out) > 0:
+        curs.execute('DELETE FROM metadata')
+
+    query_insert = ( 'INSERT INTO metadata '
+                    f'{tuple(dict_field_datatype.keys())} '
+                     'VALUES('.replace('\'',''))
+    for field_item in dict_field_datatype.items():
+        if field_item[1][0] == 'TEXT':
+            query_insert += f'\"{field_item[1][1]}\", '
+        else:
+            query_insert += f'{field_item[1][1]}, '
+    query_insert = query_insert[:-2] + ')'
+
+    curs.execute(query_insert)
+    conn.commit()
+
+    conn.close()
+
+
+def get_metadata(sql_path:str):
+    '''
+    Get the metadata (setting, version, creation date, etc.) from db file as dict
+
+    Parameters:
+    -----------
+    sql_path: str
+        Path to the SQLITE database file which the metadata will be writte into
+    format: argparse.Namespace
+
+    Return:
+    -------
+    dict_out: OrderedDict
+        metadata
+
+    '''
+
+    if not os.path.exists(sql_path):
+        raise FileNotFoundError(f'Cannot find SQLITE file: {sql_path}')
+    conn = sqlite3.connect(sql_path)
+    curs = conn.cursor()
+
+    curs.execute('SELECT * FROM metadata')
+    list_field = [field[0] for field in curs.description]
+    records_out = curs.fetchone()
+
+
+    dict_out = OrderedDict()
+    for i_field, field in enumerate(list_field):
+        dict_out[field] = records_out[i_field]
+
+    return dict_out
