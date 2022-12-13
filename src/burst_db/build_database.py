@@ -183,12 +183,12 @@ def main(args):
         envelope_geom_tformed = list(geom_burst.GetEnvelope())
 
         # Apply margin
-        envelope_geom_tformed[0] -= args.mxy[0]
-        envelope_geom_tformed[1] -= args.mxy[1]
-        envelope_geom_tformed[2] += args.mxy[0]
-        envelope_geom_tformed[3] += args.mxy[1]
+        minmax_xy = (envelope_geom_tformed[0] - args.mxy[0],
+                     envelope_geom_tformed[2] - args.mxy[0],
+                     envelope_geom_tformed[1] + args.mxy[1],
+                     envelope_geom_tformed[3] + args.mxy[1])
 
-        xmin, ymin, xmax, ymax = bd.snap_extent(tuple(envelope_geom_tformed),
+        xmin, ymin, xmax, ymax = bd.snap_extent(minmax_xy,
                                                 args.sxy[0],
                                                 args.sxy[1])
 
