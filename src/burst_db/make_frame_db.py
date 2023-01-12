@@ -14,7 +14,6 @@ import numpy as np
 import pandas as pd
 from shapely.affinity import translate
 
-ESA_DB_PATH = "burst_map_IW_000001_375887.sqlite3"
 ESA_DB_URL = "https://sar-mpc.eu/files/S1_burstid_20220530.zip"
 
 USGS_LAND_FILE = (
@@ -442,7 +441,7 @@ if __name__ == "__main__":
     # Read ESA's Burst Data
     print("Loading burst data...")
     sql = "SELECT * FROM burst_id_map"
-    with sqlite3.connect(ESA_DB_PATH) as con:
+    with sqlite3.connect(args.esa_db_path) as con:
         df_burst = gpd.GeoDataFrame.from_postgis(
             sql, con, geom_col="GEOMETRY", crs="EPSG:4326"
         ).rename_geometry("geom")
