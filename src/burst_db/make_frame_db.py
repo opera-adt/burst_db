@@ -42,42 +42,6 @@ def get_esa_burst_db(output_path="esa_burst_map.sqlite3"):
             os.chdir(cur_dir)
 
 
-def define_frames_to_burst(df_burst, n_bursts_per_frame=11, overlap=1):
-    """Create the JOIN table between frames_number and burst_id."""
-    df_burst_count_per_track = (
-        df_burst[["relative_orbit_number", "burst_id"]]
-        .groupby("relative_orbit_number")
-        .burst_id.nunique()
-    )
-    burst_count_per_track = df_burst_count_per_track.to_dict()
-
-    # frame_to_ogc_fid = {}  # would need to multiply slice idxs by 3
-    frame_to_burst_id = []
-
-    for track, count in burst_count_per_track.items():
-        current_burst_ids = df_burst[
-            df_burst.relative_orbit_number == track
-        ].burst_id.unique()
-        slices = _make_frame_slices(
-            count, n_bursts_per_frame=n_bursts_per_frame, overlap=overlap
-        )
-
-        for frame_num, cur_slice in enumerate(slices, start=1):
-            for b_id in current_burst_ids[cur_slice]:
-                frame_to_burst_id.append((track, frame_num, b_id))
-
-    df_frame_to_burst_id = pd.DataFrame(
-        frame_to_burst_id, columns=["relative_orbit_number", "frame_number", "burst_id"]
-    )
-    return df_frame_to_burst_id
-
-
-def _make_frame_slices(num_bursts, n_bursts_per_frame=11, overlap=1):
-    N = int(np.ceil(num_bursts / (n_bursts_per_frame - overlap)))
-    starts = [k * (n_bursts_per_frame - overlap) for k in range(N)]
-    return [slice(start, start + n_bursts) for start in starts]
-
-
 def make_jpl_burst_id(df):
     burst_id_jpl = (
         "t"
@@ -88,6 +52,172 @@ def make_jpl_burst_id(df):
         + df["subswath_name"].str.lower()
     )
     return burst_id_jpl
+
+
+def _setup_spatialite_con(con):
+    con.enable_load_extension(True)
+    # Try the two versions, mac and linux with .so
+    try:
+        con.load_extension("mod_spatialite")
+    except:
+        con.load_extension("mod_spatialite.so")
+    # Allow us to use spatialite functions in on GPKG files.
+    # https://medium.com/@joelmalone/sqlite3-spatialite-and-geopackages-66a08485da6c
+    con.execute("SELECT EnableGpkgAmphibiousMode();")
+
+
+def make_frame_table(outfile):
+    with sqlite3.connect(outfile) as con:
+        _setup_spatialite_con(con)
+        con.execute(
+            "CREATE TABLE frames "
+            "(fid INTEGER PRIMARY KEY, relative_orbit_number INTEGER, frame_number INTEGER, epsg INTEGER)"
+        )
+        # https://groups.google.com/g/spatialite-users/c/XcWvAk7vg0c
+        # should add geom after the table is created
+        # table_name , geometry_column_name , geometry_type , with_z , with_m , srs_id
+        con.execute(
+            "SELECT gpkgAddGeometryColumn('frames', 'geom', 'MULTIPOLYGON', 2, 0, 4326);"
+        )
+
+        # Aggregates burst geometries for each frame into one
+        con.execute(
+            """INSERT INTO frames(relative_orbit_number, frame_number, geom)
+            SELECT fb.relative_orbit_number,
+                    frame_number,
+                    ST_UnaryUnion(ST_Collect(geom)) as geom
+            FROM burst_id_map b
+            JOIN
+                frames_bursts fb
+                ON b.burst_id = fb.burst_id
+            GROUP BY fb.relative_orbit_number, frame_number;
+        """
+        )
+        print("Creating indexes and spatial index...")
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_frames_fid ON frames (fid)"
+        )
+        con.execute(
+            "CREATE INDEX idx_frames_track_frame ON frames (relative_orbit_number, frame_number)"
+        )
+        con.execute("SELECT gpkgAddSpatialIndex('frames', 'geom') ;")
+
+
+def create_frame_to_burst_mapping(df_burst, df_frames, n_bursts_per_frame=11, overlap=1):
+    """Create the JOIN table between frames_number and burst_id."""
+    df_burst_count_per_track = (
+        df_burst[["relative_orbit_number", "burst_id"]]
+        .groupby("relative_orbit_number")
+        .burst_id.nunique()
+    )
+    burst_count_per_track = df_burst_count_per_track.to_dict()
+
+    # for the unique burst id (the OGC_FID), we need to multiply slice idxs by 3
+    # since we're doing this using "burst_id" (repeated 3 times)
+    frame_to_ogc_fid = []
+
+    max_frame_num = df_frames.frame_number.max()
+
+    for track, count in burst_count_per_track.items():
+        current_burst_ids = df_burst[
+            df_burst.relative_orbit_number == track
+        ].burst_id.unique()
+        slices = _make_frame_slices(
+            count, n_bursts_per_frame=n_bursts_per_frame, overlap=overlap
+        )
+
+        for frame_num, cur_slice in enumerate(slices, start=1):
+            cur_frame_fid = (track - 1) * max_frame_num + frame_num
+            for b_id in current_burst_ids[cur_slice]:
+                # burst ID repeats for IW1, IW2, IW3
+                for i in range(1, 4):
+                    ogc_fid = 3 * (b_id - 1) + i
+                    frame_to_ogc_fid.append((cur_frame_fid, ogc_fid))
+
+    df_frame_to_burst_id = pd.DataFrame(
+        frame_to_ogc_fid, columns=["frame_fid", "burst_ogc_fid"]
+    )
+    return df_frame_to_burst_id
+
+
+def _make_frame_slices(num_bursts, n_bursts_per_frame=11, overlap=1):
+    N = int(np.ceil(num_bursts / (n_bursts_per_frame - overlap)))
+    starts = [k * (n_bursts_per_frame - overlap) for k in range(N)]
+    return [slice(start, start + n_bursts_per_frame) for start in starts]
+
+
+def make_frame_to_burst_table(outfile, df_frame_to_burst_id):
+    with sqlite3.connect(outfile) as con:
+        _setup_spatialite_con(con)
+
+        df_frame_to_burst_id.to_sql("frames_bursts", con)
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_frames_bursts_burst_ogc_fid ON frames_bursts (burst_ogc_fid)"
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_frames_bursts_frame_fid ON frames_bursts  (frame_fid)"
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_burst_id_map_OGC_FID ON burst_id_map (OGC_FID)"
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_burst_id_map_burst_id ON burst_id_map (burst_id)"
+        )
+
+
+def get_epsg_codes(df):
+    """Get the EPSG codes for all non-antimeridian polygons in a GeoDataFrame.
+
+    Uses the UTM library to account for the oddities of the Zones near Norway [1]_.
+
+    References
+    ----------
+    .. _[1]: http://www.jaworski.ca/utmzones.htm
+    """
+    import utm  # https://github.com/Turbo87/utm
+
+    epsgs = np.zeros(len(df), dtype=int)
+
+    # do the antimeridian frames first
+    am_idxs = df.geometry.map(lambda geo: (geo.geom_type != "Polygon")).values
+    epsgs[am_idxs] = df[am_idxs].geometry.map(antimeridian_epsg)
+
+    # everything else
+    # get the x, y (lon, lat) coords of all other rows
+    other_coords = np.array(
+        df[~am_idxs].geometry.map(lambda g: tuple(g.centroid.coords)[0]).tolist()
+    )
+    xs, ys = other_coords.T
+    ys_full_size = np.ones(len(epsgs)) * np.nan
+    ys_full_size[~am_idxs] = ys
+
+    idxs = np.logical_and.reduce((~am_idxs, ys_full_size > 84))
+    epsgs[idxs] = 3413
+
+    idxs = np.logical_and.reduce((~am_idxs, ys_full_size < -60))
+    epsgs[idxs] = 3031
+
+    utm_idxs = np.logical_and(ys < 84, ys > -60)
+    north_idxs = ys[utm_idxs] > 0
+
+    # North hemisphere
+
+    zones_north = [
+        utm.from_latlon(y, x)[2]
+        for (y, x) in zip(ys[utm_idxs][north_idxs], xs[utm_idxs][north_idxs])
+    ]
+    idxs = np.logical_and.reduce((~am_idxs, ys_full_size < 84, ys_full_size > 0))
+    epsgs[idxs] = 32600 + np.array(zones_north)
+
+    # South hemisphere
+
+    zones_south = [
+        utm.from_latlon(y, x)[2]
+        for (y, x) in zip(ys[utm_idxs][~north_idxs], xs[utm_idxs][~north_idxs])
+    ]
+    idxs = np.logical_and.reduce((~am_idxs, ys_full_size > -60, ys_full_size < 0))
+    epsgs[idxs] = 32700 + np.array(zones_south)
+    return epsgs
 
 
 def antimeridian_epsg(mp):
@@ -137,135 +267,6 @@ def antimeridian_epsg(mp):
     return base + zone_addition
 
 
-def get_epsg_codes(df):
-    """Get the EPSG codes for all non-antimeridian polygons in a GeoDataFrame.
-
-    Uses the UTM library to account for the oddities of the Zones near Norway.
-    """
-    import utm  # https://github.com/Turbo87/utm
-
-    epsgs = np.zeros(len(df), dtype=int)
-
-    # do the antimeridian frames first
-    am_idxs = df.geometry.map(lambda geo: (geo.geom_type != "Polygon")).values
-    epsgs[am_idxs] = df[am_idxs].geometry.map(antimeridian_epsg)
-
-    # everything else
-    # get the x, y (lon, lat) coords of all other rows
-    other_coords = np.array(
-        df[~am_idxs].geometry.map(lambda g: tuple(g.centroid.coords)[0]).tolist()
-    )
-    xs, ys = other_coords.T
-    ys_full_size = np.ones(len(epsgs)) * np.nan
-    ys_full_size[~am_idxs] = ys
-
-    idxs = np.logical_and.reduce((~am_idxs, ys_full_size > 84))
-    epsgs[idxs] = 3413
-
-    idxs = np.logical_and.reduce((~am_idxs, ys_full_size < -60))
-    epsgs[idxs] = 3031
-
-    utm_idxs = np.logical_and(ys < 84, ys > -60)
-    north_idxs = ys[utm_idxs] > 0
-
-    # North hemisphere
-
-    zones_north = [
-        utm.from_latlon(y, x)[2]
-        for (y, x) in zip(ys[utm_idxs][north_idxs], xs[utm_idxs][north_idxs])
-    ]
-    idxs = np.logical_and.reduce((~am_idxs, ys_full_size < 84, ys_full_size > 0))
-    epsgs[idxs] = 32600 + np.array(zones_north)
-
-    # South hemisphere
-
-    zones_south = [
-        utm.from_latlon(y, x)[2]
-        for (y, x) in zip(ys[utm_idxs][~north_idxs], xs[utm_idxs][~north_idxs])
-    ]
-    idxs = np.logical_and.reduce((~am_idxs, ys_full_size > -60, ys_full_size < 0))
-    epsgs[idxs] = 32700 + np.array(zones_south)
-    return epsgs
-
-
-def make_land_df(
-    buffer_deg=1.0, outname="usgs_land_1deg_buffered.geojson", driver="GeoJSON"
-):
-    if Path(outname).exists():
-        return gpd.read_file(outname)
-    df_land_cont = gpd.read_file("data/GSHHS_shp/h/GSHHS_h_L1.shp")
-    df_antartica = gpd.read_file("data/GSHHS_shp/h/GSHHS_h_L6.shp")
-    df_land = pd.concat([df_land_cont, df_antartica], axis=0)[["geometry"]].copy()
-    df_land.geometry = df_land.geometry.buffer(buffer_deg)
-    df_land = df_land.dissolve()
-    if outname:
-        df_land.to_file(outname, driver=driver)
-    return df_land
-
-
-def _setup_spatialite_con(con):
-    con.enable_load_extension(True)
-    # Try the two versions, mac and linux with .so
-    try:
-        con.load_extension("mod_spatialite")
-    except:
-        con.load_extension("mod_spatialite.so")
-    # Allow us to use spatialite functions in on GPKG files.
-    # https://medium.com/@joelmalone/sqlite3-spatialite-and-geopackages-66a08485da6c
-    con.execute("SELECT EnableGpkgAmphibiousMode();")
-
-
-def make_frame_table(outfile):
-
-    with sqlite3.connect(outfile) as con:
-        _setup_spatialite_con(con)
-        con.execute(
-            "CREATE TABLE frames "
-            "(fid INTEGER PRIMARY KEY, relative_orbit_number INTEGER, frame_number INTEGER, epsg INTEGER)"
-        )
-        # https://groups.google.com/g/spatialite-users/c/XcWvAk7vg0c
-        # should add geom after the table is created
-        # table_name , geometry_column_name , geometry_type , with_z , with_m , srs_id
-        con.execute(
-            "SELECT gpkgAddGeometryColumn('frames', 'geom', 'MULTIPOLYGON', 2, 0, 4326);"
-        )
-
-        # Aggregates burst geometries for each frame into one
-        con.execute(
-            """INSERT INTO frames(relative_orbit_number, frame_number, geom)
-            SELECT fb.relative_orbit_number,
-                    frame_number,
-                    ST_UnaryUnion(ST_Collect(geom)) as geom
-            FROM burst_id_map b
-            JOIN
-                frames_bursts fb
-                ON b.burst_id = fb.burst_id
-            GROUP BY fb.relative_orbit_number, frame_number;
-        """
-        )
-        print("Creating indexes and spatial index...")
-        con.execute(
-            "CREATE INDEX idx_frames_track_frame ON frames (relative_orbit_number, frame_number)"
-        )
-        con.execute("SELECT gpkgAddSpatialIndex('frames', 'geom') ;")
-
-
-def make_frame_to_burst_table(outfile, df_frame_to_burst_id):
-    with sqlite3.connect(outfile) as con:
-        _setup_spatialite_con(con)
-
-        df_frame_to_burst_id.to_sql("frames_bursts", con)
-        con.execute(
-            "CREATE INDEX IF NOT EXISTS idx_burst_id_map_burst_id ON burst_id_map (burst_id)"
-        )
-        con.execute(
-            "CREATE INDEX IF NOT EXISTS idx_frames_bursts_burst_id ON frames_bursts (burst_id)"
-        )
-        con.execute(
-            "CREATE INDEX IF NOT EXISTS idx_frames_bursts_tracK_frame ON frames_bursts (relative_orbit_number, frame_number)"
-        )
-
-
 def update_burst_epsg(outfile):
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
@@ -291,6 +292,21 @@ def update_burst_epsg(outfile):
                 WHERE burst_id_map.OGC_FID = burst_epsgs.OGC_FID;
         """
         con.execute(sql)
+
+
+def make_land_df(
+    buffer_deg=1.0, outname="usgs_land_1deg_buffered.geojson", driver="GeoJSON"
+):
+    if Path(outname).exists():
+        return gpd.read_file(outname)
+    df_land_cont = gpd.read_file("data/GSHHS_shp/h/GSHHS_h_L1.shp")
+    df_antartica = gpd.read_file("data/GSHHS_shp/h/GSHHS_h_L6.shp")
+    df_land = pd.concat([df_land_cont, df_antartica], axis=0)[["geometry"]].copy()
+    df_land.geometry = df_land.geometry.buffer(buffer_deg)
+    df_land = df_land.dissolve()
+    if outname:
+        df_land.to_file(outname, driver=driver)
+    return df_land
 
 
 def add_gpkg_spatial_ref_sys(outfile, epsgs):
@@ -456,23 +472,19 @@ if __name__ == "__main__":
     print("Saving initial version")
     df_burst.to_file(outfile, driver="GPKG", layer="burst_id_map")
 
-    # TESTING: load what we have
-    df_burst = gpd.read_file(outfile, layer="burst_id_map")
+    # Create frames and JOIN tables
+    # make the "frames" table
+    print("Making frames table by aggregating burst geometries...")
+    make_frame_table(outfile)
+    df_frames = gpd.read_file(outfile, layer="frames")
 
-    # Create frames
-    # Start with the JOIN table
-    print("Defining frames")
-    df_frame_to_burst_id = define_frames_to_burst(
-        df_burst, n_bursts_per_frame=n_bursts, overlap=overlap
+    # Make the JOIN table
+    print("Defining frames - bursts JOIN table")
+    df_frame_to_burst_id = create_frame_to_burst_mapping(
+        df_burst, df_frames, n_bursts_per_frame=n_bursts, overlap=overlap
     )
     make_frame_to_burst_table(outfile, df_frame_to_burst_id)
 
-    # Then make the frames table
-    print("Making frames table by aggregating burst geometries...")
-    make_frame_table(outfile)
-
-    # Read in to determine the EPSG codes
-    df_frames = gpd.read_file(outfile, layer="frames")
 
     print("Computing EPSG codes for each frame...")
     epsgs = get_epsg_codes(df_frames)
