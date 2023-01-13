@@ -297,7 +297,7 @@ def update_burst_epsg(outfile):
 def make_land_df(
     buffer_deg=1.0, outname="usgs_land_1deg_buffered.geojson", driver="GeoJSON"
 ):
-    if Path(outname).exists():
+    if outname and Path(outname).exists():
         return gpd.read_file(outname)
     df_land_cont = gpd.read_file("data/GSHHS_shp/h/GSHHS_h_L1.shp")
     df_antartica = gpd.read_file("data/GSHHS_shp/h/GSHHS_h_L6.shp")
@@ -509,10 +509,10 @@ if __name__ == "__main__":
             outname=f"usgs_land_{args.land_buffer_deg}deg_buffered.geojson",
             driver="GeoJSON",
         )
-        df_land = make_land_df(args.land_buffer_deg, outname=None)
         land_geo = df_land.geometry.unary_union
         ind_land = df_frames.geometry.intersects(land_geo)
         df_frames.loc[:, "is_near_land"] = ind_land
+        df_frames.to_file(outfile, driver="GPKG", layer="frames")
 
     update_burst_epsg(outfile)
 
