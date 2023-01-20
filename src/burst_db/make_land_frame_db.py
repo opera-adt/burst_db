@@ -202,7 +202,7 @@ def make_frame_table(outfile):
         con.execute(
             """WITH frame_tracks AS (
                 SELECT f.fid,
-                    CAST(ROUND(AVG(b.relative_orbit_number)) AS INTEGER)
+                    CAST(ROUND(AVG(b.relative_orbit_number)) AS INTEGER) AS relative_orbit_number
                 FROM frames f
                 JOIN frames_bursts fb ON f.fid = fb.frame_fid
                 JOIN burst_id_map b ON fb.burst_ogc_fid = b.ogc_fid
@@ -217,7 +217,7 @@ def make_frame_table(outfile):
         con.execute(
             """WITH op AS
                 (SELECT f.fid,
-                        orbit_pass
+                        b.orbit_pass
                 FROM frames f
                 JOIN frames_bursts fb ON f.fid = fb.frame_fid
                 JOIN burst_id_map b ON fb.burst_ogc_fid = b.ogc_fid),
@@ -242,12 +242,16 @@ def get_epsg_codes(df):
     ----------
     .. _[1]: http://www.jaworski.ca/utmzones.htm
     """
+
+    def _is_on_antimeridian(geom):
+        return geom.geom_type == "MultiPolygon" and len(geom.geoms) > 1
+
     import utm  # https://github.com/Turbo87/utm
 
     epsgs = np.zeros(len(df), dtype=int)
 
     # do the antimeridian frames first
-    am_idxs = df.geometry.map(lambda geo: (geo.geom_type != "Polygon")).values
+    am_idxs = df.geometry.map(_is_on_antimeridian).values
     epsgs[am_idxs] = df[am_idxs].geometry.map(antimeridian_epsg)
 
     # everything else
@@ -361,6 +365,41 @@ def update_burst_epsg(outfile):
         con.execute(sql)
 
 
+def fill_unassigned_epsgs(df_bursts, outfile):
+    iw2_rows = df_bursts.subswath_name == "IW2"
+    unassigned_rows = df_bursts.epsg == 0
+    unassigned_df = df_bursts.loc[(iw2_rows & unassigned_rows), :]
+    remaining_epsgs = get_epsg_codes(unassigned_df)
+    df_bursts.loc[(iw2_rows & unassigned_rows), "epsg"] = remaining_epsgs
+
+    final_idxs = df_bursts[(df_bursts.epsg == 0)].index
+    # Use the IW2 EPSG for the IW1 and IW3 bursts
+    iw1_idxs = final_idxs[::2]
+    iw3_idxs = final_idxs[1::2]
+    iw2_idxs = iw1_idxs + 1
+    df_bursts.loc[iw1_idxs, "epsg"] = df_bursts.loc[iw2_idxs, "epsg"].values
+    df_bursts.loc[iw3_idxs, "epsg"] = df_bursts.loc[iw2_idxs, "epsg"].values
+
+    if "OGC_FID" not in df_bursts.columns:
+        df_bursts = df_bursts.reset_index().rename(columns={"index": "OGC_FID"})
+
+    # make temp table
+    with sqlite3.connect(outfile) as con:
+        _setup_spatialite_con(con)
+        df_bursts[["epsg", "OGC_FID"]].to_sql("temp_burst_id_map", con, if_exists="replace", index=False)
+        con.execute("CREATE INDEX idx_temp on temp_burst_id_map (OGC_FID);")
+        # Use the new temp table to update epsgs
+        con.execute(
+            """
+            UPDATE burst_id_map
+            SET epsg = t.epsg
+            FROM temp_burst_id_map t
+            WHERE burst_id_map.OGC_FID = t.OGC_FID;
+        """
+        )
+        con.execute("DROP TABLE temp_burst_id_map;")
+
+
 def add_gpkg_spatial_ref_sys(outfile, epsgs):
     unique_epsgs = np.unique(epsgs)
     with sqlite3.connect(outfile) as con:
@@ -372,6 +411,28 @@ def add_gpkg_spatial_ref_sys(outfile, epsgs):
             except (sqlite3.OperationalError, sqlite3.IntegrityError):
                 # exists
                 pass
+        # Fix the gpkg_spatial_ref_sys table for missing UTM zone 32760
+        # https://www.gaia-gis.it/fossil/libspatialite/tktview/8b6910dbbb2180026af54a5cc5aac107fb1d62ad?plaintext
+        sql = """INSERT INTO gpkg_spatial_ref_sys (
+                    srs_name,
+                    srs_id,
+                    organization,
+                    organization_coordsys_id,
+                    definition
+                    )
+                VALUES (
+                    'WGS 84 / UTM zone 60S',
+                    32760,
+                    'EPSG',
+                    32760,
+'PROJCS["WGS 84 / UTM zone 60S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",177],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","32760"]]'
+                );
+        """
+        try:
+            con.execute(sql)
+        except (sqlite3.OperationalError, sqlite3.IntegrityError):
+            # exists
+            pass
         # More the entries from gpkg_spatial_ref_sys to spatial_ref_sys
         # so we can use the `ST_Transform` function
         con.execute("DROP TABLE IF EXISTS spatial_ref_sys;")
@@ -407,21 +468,27 @@ def save_utm_bounding_boxes(outfile, margin=4000, snap=50.0):
         pass
 
     sql = f"""
-    WITH bboxes(b, OGC_FID) AS (
-        SELECT ST_Envelope(ST_Transform(geom, epsg)), OGC_FID
-        FROM burst_id_map
-        WHERE epsg IS NOT NULL 
-        AND epsg != 0
-    )
-    UPDATE burst_id_map SET (xmin, ymin, xmax, ymax) = (
-    SELECT
-        FLOOR((ST_MinX(b) - {margin}) / {snap:.1f}) * {snap:.1f},
-        FLOOR((ST_MinY(b) - {margin}) / {snap:.1f}) * {snap:.1f},
-        CEIL((ST_MaxX(b) + {margin}) / {snap:.1f}) * {snap:.1f},
-        CEIL((ST_MaxY(b) + {margin}) / {snap:.1f}) * {snap:.1f}
-    FROM bboxes
-    WHERE OGC_FID = bboxes.OGC_FID
-    );
+WITH transformed(g, OGC_FID) AS
+  (SELECT ST_Envelope(ST_Transform(geom, epsg)) g,
+          OGC_FID
+   FROM burst_id_map
+   WHERE epsg != 0 )
+UPDATE burst_id_map
+SET (xmin,
+     ymin,
+     xmax,
+     ymax) = (bboxes.xmin,
+              bboxes.ymin,
+              bboxes.xmax,
+              bboxes.ymax)
+FROM
+  (SELECT OGC_FID,
+          FLOOR((ST_MinX(g) - {margin}) / {snap:.1f}) * {snap:.1f} AS xmin,
+          FLOOR((ST_MinY(g) - {margin}) / {snap:.1f}) * {snap:.1f} AS ymin,
+          CEIL((ST_MaxX(g) + {margin}) / {snap:.1f}) * {snap:.1f} AS xmax,
+          CEIL((ST_MaxY(g) + {margin}) / {snap:.1f}) * {snap:.1f} AS ymax
+   FROM transformed) AS bboxes
+WHERE burst_id_map.OGC_FID = bboxes.OGC_FID ;
     """
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
@@ -514,6 +581,8 @@ if __name__ == "__main__":
     if not args.outfile:
         basename = f"s1-frames-{target_frame}frames-{min_frame}min-{max_frame}max"
         outfile = f"{basename}.gpkg"
+    else:
+        outfile = args.outfile
 
     esa_db_path = args.esa_db_path
     # Read ESA's Burst Data
@@ -541,7 +610,7 @@ if __name__ == "__main__":
     )
     # Adjust the primary key so it still matches original OGC_FID
     with sqlite3.connect(outfile) as con:
-        con.execute("ALTER TABLE test3 RENAME COLUMN fid TO OGC_FID;")
+        con.execute("ALTER TABLE burst_id_map RENAME COLUMN fid TO OGC_FID;")
 
     print("Aggregating burst triplets (grouping IW1,2,3 geometries together)")
     df_burst_triplet = make_burst_triplets(df_burst)
@@ -588,6 +657,10 @@ if __name__ == "__main__":
     df_frames.to_file(outfile, driver="GPKG", layer="frames")
 
     update_burst_epsg(outfile)
+    # Get the current state of the burst_id_map table, then fill the rest
+    df_bursts = gpd.read_file(outfile, layer="burst_id_map")
+    fill_unassigned_epsgs(df_bursts, outfile)
+
     # Create the bounding box in UTM coordinates
     add_gpkg_spatial_ref_sys(outfile, epsgs)
     save_utm_bounding_boxes(outfile, margin=args.margin, snap=args.snap)
