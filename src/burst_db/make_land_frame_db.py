@@ -19,6 +19,7 @@ from burst_db import frames
 
 ESA_DB_URL = "https://sar-mpc.eu/files/S1_burstid_20220530.zip"
 
+
 def get_esa_burst_db(output_path="esa_burst_map.sqlite3"):
     """Download the ESA burst database and convert to 2D."""
     # Download the ESA burst database
@@ -126,7 +127,7 @@ def create_frame_to_burst_mapping(is_in_land, min_frame, target_frame, max_frame
 
     frame_slices = []
     for start_idx, end_idx in land_slices:
-        cur_slices = frames.solve_dp(
+        cur_slices = frames.solve(
             end_idx - start_idx,
             target=target_frame,
             min_frame=min_frame,
@@ -162,9 +163,6 @@ def make_frame_to_burst_table(outfile, df_frame_to_burst_id):
             "CREATE INDEX IF NOT EXISTS idx_frames_bursts_frame_fid ON frames_bursts (frame_fid)"
         )
         con.execute(
-            "CREATE INDEX IF NOT EXISTS idx_burst_id_map_OGC_FID ON burst_id_map (OGC_FID)"
-        )
-        con.execute(
             "CREATE INDEX IF NOT EXISTS idx_burst_id_map_burst_id ON burst_id_map (burst_id)"
         )
 
@@ -196,7 +194,43 @@ def make_frame_table(outfile):
         con.execute("CREATE INDEX IF NOT EXISTS idx_frames_fid ON frames (fid)")
         con.execute("SELECT gpkgAddSpatialIndex('frames', 'geom') ;")
         # Extra thing so that QGIS recognizes "frames" better
-        con.execute("UPDATE gpkg_geometry_columns SET geometry_type_name = 'MULTIPOLYGON';")
+        con.execute(
+            "UPDATE gpkg_geometry_columns SET geometry_type_name = 'MULTIPOLYGON';"
+        )
+        # Set the relative_orbit_number as the most common value for each frame
+        con.execute("ALTER TABLE frames ADD COLUMN relative_orbit_number INTEGER;")
+        con.execute(
+            """WITH frame_tracks AS (
+                SELECT f.fid,
+                    CAST(ROUND(AVG(b.relative_orbit_number)) AS INTEGER)
+                FROM frames f
+                JOIN frames_bursts fb ON f.fid = fb.frame_fid
+                JOIN burst_id_map b ON fb.burst_ogc_fid = b.ogc_fid
+                GROUP BY 1
+            ) UPDATE frames SET relative_orbit_number = frame_tracks.relative_orbit_number
+            FROM frame_tracks
+            WHERE frames.fid = frame_tracks.fid;
+            """
+        )
+        # Set the orbit_pass as the value from the first burst
+        con.execute("ALTER TABLE frames ADD COLUMN orbit_pass TEXT;")
+        con.execute(
+            """WITH op AS
+                (SELECT f.fid,
+                        orbit_pass
+                FROM frames f
+                JOIN frames_bursts fb ON f.fid = fb.frame_fid
+                JOIN burst_id_map b ON fb.burst_ogc_fid = b.ogc_fid),
+            frame_orbits AS (
+                SELECT fid,
+                    FIRST_VALUE(orbit_pass) OVER (PARTITION BY fid) AS orbit_pass
+                FROM op
+                GROUP BY fid)
+            UPDATE frames SET orbit_pass = frame_orbits.orbit_pass
+            FROM frame_orbits
+            WHERE frames.fid = frame_orbits.fid;
+            """
+        )
 
 
 def get_epsg_codes(df):
@@ -502,7 +536,12 @@ if __name__ == "__main__":
 
     # Start the outfile with the ESA database contents
     print("Saving initial version")
-    df_burst.to_file(outfile, driver="GPKG", layer="burst_id_map")
+    df_burst.set_index("OGC_FID").to_file(
+        outfile, driver="GPKG", layer="burst_id_map", index=False
+    )
+    # Adjust the primary key so it still matches original OGC_FID
+    with sqlite3.connect(outfile) as con:
+        con.execute("ALTER TABLE test3 RENAME COLUMN fid TO OGC_FID;")
 
     print("Aggregating burst triplets (grouping IW1,2,3 geometries together)")
     df_burst_triplet = make_burst_triplets(df_burst)
@@ -544,9 +583,7 @@ if __name__ == "__main__":
     print("Saving frames...")
     # weird geopandas thing?
     if "geom" in df_frames.columns and df_frames._geometry_column_name == "geometry":
-        df_frames = df_frames.loc[
-            :, ["epsg", "geometry"]
-        ]
+        df_frames = df_frames.loc[:, ["epsg", "geometry"]]
 
     df_frames.to_file(outfile, driver="GPKG", layer="frames")
 

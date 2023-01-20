@@ -7,9 +7,9 @@ MAX_FRAME = 12
 TARGET_FRAME = 10
 
 
-def solve_dp(n, target=TARGET_FRAME, max_frame=MAX_FRAME, min_frame=MIN_FRAME):
+def solve(n, target=TARGET_FRAME, max_frame=MAX_FRAME, min_frame=MIN_FRAME):
     """Solve the dynamic programming problem to find the best frame sizes.
-    
+
     Parameters
     ----------
     n : int
@@ -31,17 +31,18 @@ def solve_dp(n, target=TARGET_FRAME, max_frame=MAX_FRAME, min_frame=MIN_FRAME):
     This is posed as the same problem as the text justification problem.
     "words" == bursts. "lines" == Frames. Where to "break the lines" == "group the frames"
 
-    The differences between here and the source:
-    1. The slices are overlapping, so we need to add 1 to the length of each frame.
+    The differences between here and reference ..[1] are
+
+    1. Our "badness" has both a maximum and minumum size, beyond which the
+    badness is infinite.  We also have a "target" so that the majority of
+    frames are exactly that size, and only occasionally to we adjust the
+    size to be smaller or larger.
+    2. The slices are overlapping, so we need to add 1 to the length of each frame.
     This is accounted for in the "badness" function.
-    2. Our "badness" has both a maximum and minumum size, beyond which the badness is infinite.
-    We also have a "target" so that the majority of frames are exactly that size, and only
-    occasionally to we adjust the size to be smaller or larger.
 
     Reference
     ---------
-    https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-fall-2011/resources/mit6_006f11_lec20/
-    are
+    ..[1] https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-fall-2011/resources/mit6_006f11_lec20/
     """
     # DP[i][0] is the minimum badness of the frames starting at i
     # and DP[i][1] is the index of the next frame (to backtrack and get the slices)
@@ -121,7 +122,7 @@ def _buffer_small_frames(indicator, min_frame=MIN_FRAME):
 def _make_frame_tuples(land_slices):
     frame_slices = []
     for start_idx, end_idx in land_slices:
-        cur_slices = solve_dp(end_idx - start_idx)
+        cur_slices = solve(end_idx - start_idx)
         # bump up so they refer to rows, instead of being from 0
         cur_slices = [(s + start_idx, e + start_idx) for (s, e) in cur_slices]
         frame_slices.extend(cur_slices)
