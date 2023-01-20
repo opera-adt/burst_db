@@ -146,6 +146,14 @@ def _make_frame_slices(num_bursts, n_bursts_per_frame=11, overlap=1):
     return [slice(start, start + n_bursts_per_frame) for start in starts]
 
 
+def _get_frame_lengths(num_bursts, n_bursts_per_frame=11, overlap=1):
+    slices = _make_frame_slices(
+        num_bursts, n_bursts_per_frame=n_bursts_per_frame, overlap=overlap
+    )
+    dummy = np.zeros(num_bursts)
+    return [len(dummy[s]) for s in slices]
+
+
 def make_frame_to_burst_table(outfile, df_frame_to_burst_id):
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
@@ -300,8 +308,8 @@ def make_land_df(
     if outname and Path(outname).exists():
         return gpd.read_file(outname)
     df_land_cont = gpd.read_file("data/GSHHS_shp/h/GSHHS_h_L1.shp")
-    df_antartica = gpd.read_file("data/GSHHS_shp/h/GSHHS_h_L6.shp")
-    df_land = pd.concat([df_land_cont, df_antartica], axis=0)[["geometry"]].copy()
+    df_antarctica = gpd.read_file("data/GSHHS_shp/h/GSHHS_h_L6.shp")
+    df_land = pd.concat([df_land_cont, df_antarctica], axis=0)[["geometry"]].copy()
     df_land.geometry = df_land.geometry.buffer(buffer_deg)
     df_land = df_land.dissolve()
     if outname:
