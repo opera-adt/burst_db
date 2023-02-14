@@ -21,7 +21,7 @@ setup(
     packages=find_packages("src"),  # include all packages under src
     package_dir={"": "src"},        # tell distutils packages are under src
     classifiers=['Programming Language :: Python'],
-    install_requires=['argparse', 'numpy', 'gdal'],
+    install_requires=['numpy', 'gdal'],
     url='https://github.com/opera-adt/burst_db',
     author='Seongsu Jeong',
     author_email='seongsu.jeong@jpl.nasa.gov',
