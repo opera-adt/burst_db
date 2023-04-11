@@ -77,37 +77,6 @@ def get_land_indicator(df_burst_triplet: pd.DataFrame, land_geom):
     return is_in_land
 
 
-def create_frame_to_burst_mapping(is_in_land: pd.Index, min_frame: int, target_frame: int, max_frame: int):
-    """Create the JOIN table between frames_number and burst_id."""
-    frame_slices = frames.buffer_small_frames(
-        is_in_land, min_frame=min_frame
-    )
-
-    cumulative_slice_idxs = []
-    for start_idx, end_idx, is_land in frame_slices:
-        cur_slices = frames.solve(
-            end_idx - start_idx,
-            target=target_frame,
-            min_frame=min_frame,
-            max_frame=max_frame,
-        )
-        # bump up so they refer to rows, instead of being from 0
-        cur_slices = [(s + start_idx, e + start_idx, is_land) for (s, e) in cur_slices]
-        cumulative_slice_idxs.extend(cur_slices)
-
-    # Create the frame IDs mapping to burst_id
-    # (frame_id, OGC_FID)
-    frame_ogc_fid_tuples = []
-    for frame_id, (start_idx, end_idx, is_land) in enumerate(frame_slices, start=1):
-        for burst_id in range(start_idx + 1, end_idx + 1):
-            for ogc_fid in range(1 + 3 * (burst_id - 1), 4 + 3 * (burst_id - 1)):
-                frame_ogc_fid_tuples.append((frame_id, ogc_fid, is_land))
-
-    df_frame_to_burst_id = pd.DataFrame(
-        frame_ogc_fid_tuples, columns=["frame_fid", "burst_ogc_fid", "is_land"]
-    )
-    return df_frame_to_burst_id
-
 
 def make_frame_to_burst_table(outfile, df_frame_to_burst_id):
     with sqlite3.connect(outfile) as con:
@@ -550,7 +519,7 @@ def main():
     # Create frames and JOIN tables
     # Make the JOIN table first
     print("Defining frames - bursts JOIN table")
-    df_frame_to_burst_id = create_frame_to_burst_mapping(
+    df_frame_to_burst_id = frames.create_frame_to_burst_mapping(
         is_in_land,
         min_frame=args.min_frame,
         target_frame=args.target_frame,

@@ -2,12 +2,45 @@ import math
 from collections import Counter, namedtuple
 from itertools import groupby
 from typing import List
+import pandas as pd
 
 MIN_FRAME = 5
 MAX_FRAME = 12
 TARGET_FRAME = 10
 
 FrameSlice = namedtuple("FrameSlice", ["start_idx", "end_idx", "is_land"])
+
+
+def create_frame_to_burst_mapping(
+    is_in_land: pd.Index, min_frame: int, target_frame: int, max_frame: int
+) -> pd.DataFrame:
+    """Create the JOIN table between frames_number and burst_id."""
+    frame_slices = create_frame_slices(is_in_land, min_frame=min_frame)
+
+    cumulative_slice_idxs = []
+    for start_idx, end_idx, is_land in frame_slices:
+        cur_slices = solve(
+            end_idx - start_idx,
+            target=target_frame,
+            min_frame=min_frame,
+            max_frame=max_frame,
+        )
+        # bump up so they refer to rows, instead of being from 0
+        cur_slices = [(s + start_idx, e + start_idx, is_land) for (s, e) in cur_slices]
+        cumulative_slice_idxs.extend(cur_slices)
+
+    # Create the frame IDs mapping to burst_id
+    # (frame_id, OGC_FID)
+    frame_ogc_fid_tuples = []
+    for frame_id, (start_idx, end_idx, is_land) in enumerate(frame_slices, start=1):
+        for burst_id in range(start_idx + 1, end_idx + 1):
+            for ogc_fid in range(1 + 3 * (burst_id - 1), 4 + 3 * (burst_id - 1)):
+                frame_ogc_fid_tuples.append((frame_id, ogc_fid, is_land))
+
+    df_frame_to_burst_id = pd.DataFrame(
+        frame_ogc_fid_tuples, columns=["frame_fid", "burst_ogc_fid", "is_land"]
+    )
+    return df_frame_to_burst_id
 
 
 def solve(n, target=TARGET_FRAME, max_frame=MAX_FRAME, min_frame=MIN_FRAME):
@@ -97,20 +130,35 @@ def _badness(i, j, target=TARGET_FRAME, max_frame=MAX_FRAME, min_frame=MIN_FRAME
         return math.floor(abs((n + 1) - target)) ** 3
 
 
-def buffer_small_frames(indicator, min_frame=MIN_FRAME):
-    ind = indicator.copy()
+def create_frame_slices(is_land_indicator, min_frame=MIN_FRAME) -> List[FrameSlice]:
+    """Group adjacent frames that are too small."""
+    indicator = is_land_indicator.copy()
     ii = 0
-    for k, v in groupby(indicator):
+    # First iter: make sure all land sequences are at least min_frame long
+    for is_land, v in groupby(indicator):
         n_frames = len(list(v))
         ii += n_frames
-        if k and n_frames < min_frame:
-            ind[ii - min_frame // 2 : ii + min_frame // 2 + 1] = True
+        if is_land and n_frames < min_frame:
+            indicator[ii - min_frame // 2 : ii + min_frame // 2 + 1] = True
+
+    # Second iter: keep looping while there's any small water sequences. make them land
+    keep_looping = True
+    while keep_looping:
+        keep_looping = False
+        ii = 0
+        for is_land, v in groupby(indicator):
+            n_frames = len(list(v))
+            ii += n_frames
+            if not is_land and n_frames < min_frame:
+                keep_looping = True
+                indicator[ii - min_frame // 2 : ii + min_frame // 2 + 1] = True
+            # loop will break when we didn't adjust any water sequences
 
     consecutive_land_frames = Counter()
     consecutive_water_frames = Counter()
     frame_slices: List[FrameSlice] = []
     ii, i_prev = 0, 0
-    for is_land, cur_indicators in groupby(ind):
+    for is_land, cur_indicators in groupby(indicator):
         n_frames = len(list(cur_indicators))
         i_prev = ii
         ii += n_frames
@@ -127,21 +175,3 @@ def buffer_small_frames(indicator, min_frame=MIN_FRAME):
     print(sorted(consecutive_water_frames.items())[:20])
 
     return frame_slices
-
-
-def _make_frame_tuples(land_slices):
-    frame_slices = []
-    for start_idx, end_idx in land_slices:
-        cur_slices = solve(end_idx - start_idx)
-        # bump up so they refer to rows, instead of being from 0
-        cur_slices = [(s + start_idx, e + start_idx) for (s, e) in cur_slices]
-        frame_slices.extend(cur_slices)
-
-    # Create the frame IDs mapping to burst_id
-    # (frame_id, OGC_FID)
-    frame_tuples = []
-    for frame_id, (start_idx, end_idx) in enumerate(frame_slices, start=1):
-        for burst_id in range(start_idx + 1, end_idx + 1):
-            for ogc_fid in range(1 + 3 * (burst_id - 1), 4 + 3 * (burst_id - 1)):
-                frame_tuples.append((frame_id, ogc_fid))
-    return frame_tuples
