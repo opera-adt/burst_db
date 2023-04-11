@@ -36,17 +36,28 @@ def get_usgs_land(outpath=None):
 
 
 def get_land_df(
-    buffer_deg=0.2, outname="usgs_land_{d}deg_buffered.geojson", driver="GeoJSON"
+    buffer_deg=0.2,
+    outname="usgs_land_{d}deg_buffered.geojson",
+    driver="GeoJSON",
+    zip=True,
 ):
     outname = outname.format(d=buffer_deg)
     if outname and Path(outname).exists():
         print(f"Loading {outname} from disk")
         return gpd.read_file(outname)
+    elif Path(outname + ".zip").exists():
+        print(f"Loading {outname}.zip from disk")
+        return gpd.read_file(str(outname) + ".zip")
 
+    # Make sure we're adding the zip extension
+    if zip and outname.endswith(".geojson"):
+        outname = Path(str(outname) + ".zip")
+
+    # If we haven't already made the file, make it
     df_land_cont, df_antarctica = get_usgs_land()
     df_land = pd.concat([df_land_cont, df_antarctica], axis=0)[["geometry"]]
     df_land.geometry = df_land.geometry.buffer(buffer_deg)
     df_land = df_land.dissolve()
-    if outname:
-        df_land.to_file(outname, driver=driver)
+
+    df_land.to_file(outname, driver=driver)
     return df_land

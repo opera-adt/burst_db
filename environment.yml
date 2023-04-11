@@ -1,0 +1,11 @@
+channels:
+- conda-forge
+dependencies:
+- python >= 3.8
+- numpy
+- geopandas
+- shapely
+- pandas
+- pip
+- pip:
+  - unzip_http

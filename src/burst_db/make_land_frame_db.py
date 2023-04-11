@@ -360,12 +360,12 @@ def fill_unassigned_epsgs(df_bursts, outfile):
         con.execute("DROP TABLE temp_burst_id_map;")
 
 
-def add_gpkg_spatial_ref_sys(outfile, epsgs):
-    unique_epsgs = np.unique(epsgs)
+def add_gpkg_spatial_ref_sys(outfile):
+    epsgs = [3031, 3413, 4326] + list(range(32601, 32661)) + list(range(32701, 32761))
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
         sql = "SELECT gpkgInsertEpsgSRID({epsg});"
-        for epsg in unique_epsgs:
+        for epsg in epsgs:
             try:
                 con.execute(sql.format(epsg=epsg))
             except (sqlite3.OperationalError, sqlite3.IntegrityError):
@@ -619,7 +619,7 @@ def main():
     fill_unassigned_epsgs(df_bursts, outfile)
 
     # Create the bounding box in UTM coordinates
-    add_gpkg_spatial_ref_sys(outfile, epsgs)
+    add_gpkg_spatial_ref_sys(outfile)
     save_utm_bounding_boxes(outfile, margin=args.margin, snap=args.snap)
 
     # Make the minimal version of the DB
@@ -630,6 +630,7 @@ def main():
 
     tf = time.time()
     print(f"Total time: {tf - t0:.2f} seconds")
+
 
 if __name__ == "__main__":
     main()
