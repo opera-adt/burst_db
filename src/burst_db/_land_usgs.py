@@ -1,4 +1,5 @@
 import fnmatch
+import zipfile
 from pathlib import Path
 
 import geopandas as gpd
@@ -50,10 +51,6 @@ def get_land_df(
         print(f"Loading {outname}.zip from disk")
         return gpd.read_file(str(outname) + ".zip")
 
-    # Make sure we're adding the zip extension
-    if zip and outname.endswith(".geojson"):
-        outname = Path(str(outname) + ".zip")
-
     # If we haven't already made the file, make it
     df_land_cont, df_antarctica = get_usgs_land()
     df_land = pd.concat([df_land_cont, df_antarctica], axis=0)[["geometry"]]
@@ -61,4 +58,15 @@ def get_land_df(
     df_land = df_land.dissolve()
 
     df_land.to_file(outname, driver=driver)
+    if zip and outname.endswith(".geojson"):
+        outname_zipped = Path(str(outname) + ".zip")
+        # zip and remove the original
+        with zipfile.ZipFile(
+            outname_zipped, "w", compression=zipfile.ZIP_DEFLATED
+        ) as zf:
+            zf.write(outname)
+
+        # Remove the original
+        Path(outname).unlink()
+
     return df_land

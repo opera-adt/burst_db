@@ -1,10 +1,13 @@
 import math
-from collections import Counter
+from collections import Counter, namedtuple
 from itertools import groupby
+from typing import List
 
 MIN_FRAME = 5
 MAX_FRAME = 12
 TARGET_FRAME = 10
+
+FrameSlice = namedtuple("FrameSlice", ["start_idx", "end_idx", "is_land"])
 
 
 def solve(n, target=TARGET_FRAME, max_frame=MAX_FRAME, min_frame=MIN_FRAME):
@@ -104,18 +107,26 @@ def buffer_small_frames(indicator, min_frame=MIN_FRAME):
             ind[ii - min_frame // 2 : ii + min_frame // 2 + 1] = True
 
     consecutive_land_frames = Counter()
-    land_slices = []
+    consecutive_water_frames = Counter()
+    frame_slices: List[FrameSlice] = []
     ii, i_prev = 0, 0
-    for k, v in groupby(ind):
-        n_frames = len(list(v))
+    for is_land, cur_indicators in groupby(ind):
+        n_frames = len(list(cur_indicators))
         i_prev = ii
         ii += n_frames
-        if not k:
-            continue
-        land_slices.append((i_prev, ii))
-        consecutive_land_frames[n_frames] += 1
+        frame_slices.append(FrameSlice(i_prev, ii, bool(is_land)))
 
-    return ind, consecutive_land_frames, land_slices
+        if is_land:
+            consecutive_land_frames[n_frames] += 1
+        else:
+            consecutive_water_frames[n_frames] += 1
+
+    print("Number of occurrences with smallest consecutive land frames:")
+    print(sorted(consecutive_land_frames.items())[:20])
+    print("Number of occurrences with smallest consecutive water frames:")
+    print(sorted(consecutive_water_frames.items())[:20])
+
+    return frame_slices
 
 
 def _make_frame_tuples(land_slices):

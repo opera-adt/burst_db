@@ -68,7 +68,7 @@ def make_burst_triplets(df_burst):
     return df_burst_triplet
 
 
-def get_land_indicator(df_burst_triplet, land_geom):
+def get_land_indicator(df_burst_triplet: pd.DataFrame, land_geom):
     tree = STRtree(df_burst_triplet.geometry)
     idxs_land = tree.query(land_geom, predicate="intersects")
     if idxs_land.ndim == 2:
@@ -77,16 +77,14 @@ def get_land_indicator(df_burst_triplet, land_geom):
     return is_in_land
 
 
-def create_frame_to_burst_mapping(is_in_land, min_frame, target_frame, max_frame):
+def create_frame_to_burst_mapping(is_in_land: pd.Index, min_frame: int, target_frame: int, max_frame: int):
     """Create the JOIN table between frames_number and burst_id."""
-    indicator, consecutive_land_frames, land_slices = frames.buffer_small_frames(
+    frame_slices = frames.buffer_small_frames(
         is_in_land, min_frame=min_frame
     )
-    print("Number of occurrences with smallest consecutive land frames:")
-    print(sorted(consecutive_land_frames.items())[:20])
 
-    frame_slices = []
-    for start_idx, end_idx in land_slices:
+    cumulative_slice_idxs = []
+    for start_idx, end_idx, is_land in frame_slices:
         cur_slices = frames.solve(
             end_idx - start_idx,
             target=target_frame,
@@ -94,19 +92,19 @@ def create_frame_to_burst_mapping(is_in_land, min_frame, target_frame, max_frame
             max_frame=max_frame,
         )
         # bump up so they refer to rows, instead of being from 0
-        cur_slices = [(s + start_idx, e + start_idx) for (s, e) in cur_slices]
-        frame_slices.extend(cur_slices)
+        cur_slices = [(s + start_idx, e + start_idx, is_land) for (s, e) in cur_slices]
+        cumulative_slice_idxs.extend(cur_slices)
 
     # Create the frame IDs mapping to burst_id
     # (frame_id, OGC_FID)
     frame_ogc_fid_tuples = []
-    for frame_id, (start_idx, end_idx) in enumerate(frame_slices, start=1):
+    for frame_id, (start_idx, end_idx, is_land) in enumerate(frame_slices, start=1):
         for burst_id in range(start_idx + 1, end_idx + 1):
             for ogc_fid in range(1 + 3 * (burst_id - 1), 4 + 3 * (burst_id - 1)):
-                frame_ogc_fid_tuples.append((frame_id, ogc_fid))
+                frame_ogc_fid_tuples.append((frame_id, ogc_fid, is_land))
 
     df_frame_to_burst_id = pd.DataFrame(
-        frame_ogc_fid_tuples, columns=["frame_fid", "burst_ogc_fid"]
+        frame_ogc_fid_tuples, columns=["frame_fid", "burst_ogc_fid", "is_land"]
     )
     return df_frame_to_burst_id
 
@@ -322,41 +320,6 @@ def update_burst_epsg(outfile):
         """
         con.execute(sql)
 
-
-def fill_unassigned_epsgs(df_bursts, outfile):
-    iw2_rows = df_bursts.subswath_name == "IW2"
-    unassigned_rows = df_bursts.epsg == 0
-    unassigned_iw2_idxs = df_bursts[iw2_rows & unassigned_rows].index
-
-    remaining_epsgs = get_epsg_codes(df_bursts.loc[unassigned_iw2_idxs, :])
-    df_bursts.loc[unassigned_iw2_idxs, "epsg"] = remaining_epsgs
-
-    iw1_idxs = unassigned_iw2_idxs - 1
-    iw3_idxs = unassigned_iw2_idxs + 1
-
-    df_bursts.loc[iw1_idxs, "epsg"] = df_bursts.loc[unassigned_iw2_idxs, "epsg"].values
-    df_bursts.loc[iw3_idxs, "epsg"] = df_bursts.loc[unassigned_iw2_idxs, "epsg"].values
-
-    if "OGC_FID" not in df_bursts.columns:
-        df_bursts = df_bursts.reset_index().rename(columns={"index": "OGC_FID"})
-
-    # make temp table
-    with sqlite3.connect(outfile) as con:
-        _setup_spatialite_con(con)
-        df_bursts[["epsg", "OGC_FID"]].to_sql(
-            "temp_burst_id_map", con, if_exists="replace", index=False
-        )
-        con.execute("CREATE INDEX idx_temp on temp_burst_id_map (OGC_FID);")
-        # Use the new temp table to update epsgs
-        con.execute(
-            """
-            UPDATE burst_id_map
-            SET epsg = t.epsg
-            FROM temp_burst_id_map t
-            WHERE burst_id_map.OGC_FID = t.OGC_FID;
-        """
-        )
-        con.execute("DROP TABLE temp_burst_id_map;")
 
 
 def add_gpkg_spatial_ref_sys(outfile):
@@ -613,9 +576,6 @@ def main():
     df_frames.to_file(outfile, driver="GPKG", layer="frames")
 
     update_burst_epsg(outfile)
-    # Get the current state of the burst_id_map table, then fill the rest
-    df_bursts = gpd.read_file(outfile, layer="burst_id_map")
-    fill_unassigned_epsgs(df_bursts, outfile)
 
     # Create the bounding box in UTM coordinates
     add_gpkg_spatial_ref_sys(outfile)
