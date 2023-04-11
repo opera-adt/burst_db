@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 from shapely import STRtree
 from shapely.affinity import translate
+import utm  # https://github.com/Turbo87/utm
+
 
 from . import frames
 from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
@@ -204,8 +206,6 @@ def get_epsg_codes(df):
     def _is_on_antimeridian(geom):
         return geom.geom_type == "MultiPolygon" and len(geom.geoms) > 1
 
-    import utm  # https://github.com/Turbo87/utm
-
     epsgs = np.zeros(len(df), dtype=int)
 
     # do the antimeridian frames first
@@ -326,17 +326,16 @@ def update_burst_epsg(outfile):
 def fill_unassigned_epsgs(df_bursts, outfile):
     iw2_rows = df_bursts.subswath_name == "IW2"
     unassigned_rows = df_bursts.epsg == 0
-    unassigned_df = df_bursts.loc[(iw2_rows & unassigned_rows), :]
-    remaining_epsgs = get_epsg_codes(unassigned_df)
-    df_bursts.loc[(iw2_rows & unassigned_rows), "epsg"] = remaining_epsgs
+    unassigned_iw2_idxs = df_bursts[iw2_rows & unassigned_rows].index
 
-    final_idxs = df_bursts[(df_bursts.epsg == 0)].index
-    # Use the IW2 EPSG for the IW1 and IW3 bursts
-    iw1_idxs = final_idxs[::2]
-    iw3_idxs = final_idxs[1::2]
-    iw2_idxs = iw1_idxs + 1
-    df_bursts.loc[iw1_idxs, "epsg"] = df_bursts.loc[iw2_idxs, "epsg"].values
-    df_bursts.loc[iw3_idxs, "epsg"] = df_bursts.loc[iw2_idxs, "epsg"].values
+    remaining_epsgs = get_epsg_codes(df_bursts.loc[unassigned_iw2_idxs, :])
+    df_bursts.loc[unassigned_iw2_idxs, "epsg"] = remaining_epsgs
+
+    iw1_idxs = unassigned_iw2_idxs - 1
+    iw3_idxs = unassigned_iw2_idxs + 1
+
+    df_bursts.loc[iw1_idxs, "epsg"] = df_bursts.loc[unassigned_iw2_idxs, "epsg"].values
+    df_bursts.loc[iw3_idxs, "epsg"] = df_bursts.loc[unassigned_iw2_idxs, "epsg"].values
 
     if "OGC_FID" not in df_bursts.columns:
         df_bursts = df_bursts.reset_index().rename(columns={"index": "OGC_FID"})

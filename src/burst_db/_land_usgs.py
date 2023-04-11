@@ -26,6 +26,7 @@ def get_usgs_land(outpath=None):
         if outname.suffix == (".shp"):
             shp_files.append(outname)
         if not outname.exists():
+            outname.parent.mkdir(parents=True, exist_ok=True)
             with rzf.open(fn) as fp, open(outname, "wb") as fout:
                 print(f"Extracting {fn.filename} to {outname}")
                 while r := fp.read(2**18):

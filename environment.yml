@@ -2,10 +2,11 @@ channels:
 - conda-forge
 dependencies:
 - python >= 3.8
-- numpy
 - geopandas
-- shapely
+- numpy
 - pandas
 - pip
+- shapely
+- utm
 - pip:
   - unzip_http
