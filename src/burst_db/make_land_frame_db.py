@@ -549,7 +549,7 @@ def main():
     # Read ESA's Burst Data
     if not Path(esa_db_path).exists():
         print(f"Downloading {ESA_DB_URL} to {esa_db_path}...")
-        esa_db_path = get_esa_burst_db()
+        get_esa_burst_db(esa_db_path)
 
     print("Loading burst data...")
     sql = "SELECT * FROM burst_id_map"

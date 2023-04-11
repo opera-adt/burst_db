@@ -7,7 +7,7 @@ import zipfile
 ESA_DB_URL = "https://sar-mpc.eu/files/S1_burstid_20220530.zip"
 
 
-def get_esa_burst_db(output_path="esa_burst_map.sqlite3"):
+def get_esa_burst_db(output_path="burst_map_IW_000001_375887.sqlite3"):
     """Download the ESA burst database."""
     print(f"Downloading ESA burst database from {ESA_DB_URL} to {output_path}.")
     db_filename = "S1_burstid_20220530/IW/sqlite/burst_map_IW_000001_375887.sqlite3"
