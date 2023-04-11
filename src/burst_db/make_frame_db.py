@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 import argparse
-import os
-import shutil
 import sqlite3
-import subprocess
-import tempfile
 import time
-import zipfile
 from pathlib import Path
 
 import geopandas as gpd
@@ -14,32 +9,8 @@ import numpy as np
 import pandas as pd
 from shapely.affinity import translate
 
-ESA_DB_URL = "https://sar-mpc.eu/files/S1_burstid_20220530.zip"
-
-USGS_LAND_FILE = (
-    "/Users/staniewi/Documents/Learning/notebooks/usgs_land_1deg_buffered.geojson"
-)
-
-
-def get_esa_burst_db(output_path="esa_burst_map.sqlite3"):
-    """Download the ESA burst database and convert to 2D."""
-    # Download the ESA burst database
-
-    print("Downloading ESA burst database")
-    db_filename = "S1_burstid_20220530/IW/sqlite/burst_map_IW_000001_375887.sqlite3"
-    cur_dir = os.getcwd()
-    output_path = os.path.abspath(output_path)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        try:
-            os.chdir(tmpdir)
-            subprocess.check_call(["wget", ESA_DB_URL])
-
-            with zipfile.ZipFile(ESA_DB_URL.split("/")[-1], "r") as zip_ref:
-                zip_ref.extract(db_filename)
-                shutil.move(db_filename, output_path)
-                shutil.rmtree(db_filename.split("/")[0])
-        finally:
-            os.chdir(cur_dir)
+from ._esa_burst_db import get_esa_burst_db
+from ._land_usgs import get_land_df
 
 
 def make_jpl_burst_id(df):
@@ -94,16 +65,16 @@ def make_frame_table(outfile):
         """
         )
         print("Creating indexes and spatial index...")
-        con.execute(
-            "CREATE INDEX IF NOT EXISTS idx_frames_fid ON frames (fid)"
-        )
+        con.execute("CREATE INDEX IF NOT EXISTS idx_frames_fid ON frames (fid)")
         con.execute(
             "CREATE INDEX idx_frames_track_frame ON frames (relative_orbit_number, frame_number)"
         )
         con.execute("SELECT gpkgAddSpatialIndex('frames', 'geom') ;")
 
 
-def create_frame_to_burst_mapping(df_burst, df_frames, n_bursts_per_frame=11, overlap=1):
+def create_frame_to_burst_mapping(
+    df_burst, df_frames, n_bursts_per_frame=11, overlap=1
+):
     """Create the JOIN table between frames_number and burst_id."""
     df_burst_count_per_track = (
         df_burst[["relative_orbit_number", "burst_id"]]
@@ -414,13 +385,13 @@ def get_parser():
     parser.add_argument(
         "--snap",
         type=float,
-        default=50.0,
+        default=30.0,
         help="Snap the bounding box to the nearest multiple of this value.",
     )
     parser.add_argument(
         "--margin",
         type=float,
-        default=4000.0,
+        default=5000.0,
         help="Add this margin surrounding the bounding box of bursts.",
     )
     parser.add_argument(
@@ -492,7 +463,6 @@ if __name__ == "__main__":
         df_burst, df_frames, n_bursts_per_frame=n_bursts, overlap=overlap
     )
     make_frame_to_burst_table(outfile, df_frame_to_burst_id)
-
 
     print("Computing EPSG codes for each frame...")
     epsgs = get_epsg_codes(df_frames)

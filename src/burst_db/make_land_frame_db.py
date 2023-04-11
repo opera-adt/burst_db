@@ -1,45 +1,18 @@
 #!/usr/bin/env python
 import argparse
-import os
-import shutil
 import sqlite3
-import subprocess
-import tempfile
 import time
-import zipfile
 from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from shapely.affinity import translate
 from shapely import STRtree
+from shapely.affinity import translate
 
-from burst_db import frames
-
-ESA_DB_URL = "https://sar-mpc.eu/files/S1_burstid_20220530.zip"
-
-
-def get_esa_burst_db(output_path="esa_burst_map.sqlite3"):
-    """Download the ESA burst database and convert to 2D."""
-    # Download the ESA burst database
-
-    print("Downloading ESA burst database")
-    db_filename = "S1_burstid_20220530/IW/sqlite/burst_map_IW_000001_375887.sqlite3"
-    cur_dir = os.getcwd()
-    output_path = os.path.abspath(output_path)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        try:
-            os.chdir(tmpdir)
-            subprocess.check_call(["wget", ESA_DB_URL])
-
-            with zipfile.ZipFile(ESA_DB_URL.split("/")[-1], "r") as zip_ref:
-                zip_ref.extract(db_filename)
-                shutil.move(db_filename, output_path)
-                shutil.rmtree(db_filename.split("/")[0])
-        finally:
-            os.chdir(cur_dir)
-    return output_path
+from . import frames
+from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
+from ._land_usgs import get_land_df
 
 
 def make_jpl_burst_id(df):
@@ -93,21 +66,6 @@ def make_burst_triplets(df_burst):
     return df_burst_triplet
 
 
-def make_land_df(
-    buffer_deg=0.2, outname="usgs_land_02deg_buffered.geojson", driver="GeoJSON"
-):
-    if outname and Path(outname).exists():
-        return gpd.read_file(outname)
-    df_land_cont = gpd.read_file("data/GSHHS_shp/h/GSHHS_h_L1.shp")
-    df_antarctica = gpd.read_file("data/GSHHS_shp/h/GSHHS_h_L6.shp")
-    df_land = pd.concat([df_land_cont, df_antarctica], axis=0)[["geometry"]].copy()
-    df_land.geometry = df_land.geometry.buffer(buffer_deg)
-    df_land = df_land.dissolve()
-    if outname:
-        df_land.to_file(outname, driver=driver)
-    return df_land
-
-
 def get_land_indicator(df_burst_triplet, land_geom):
     tree = STRtree(df_burst_triplet.geometry)
     idxs_land = tree.query(land_geom, predicate="intersects")
@@ -119,7 +77,7 @@ def get_land_indicator(df_burst_triplet, land_geom):
 
 def create_frame_to_burst_mapping(is_in_land, min_frame, target_frame, max_frame):
     """Create the JOIN table between frames_number and burst_id."""
-    indicator, consecutive_land_frames, land_slices = frames._buffer_small_frames(
+    indicator, consecutive_land_frames, land_slices = frames.buffer_small_frames(
         is_in_land, min_frame=min_frame
     )
     print("Number of occurrences with smallest consecutive land frames:")
@@ -386,7 +344,9 @@ def fill_unassigned_epsgs(df_bursts, outfile):
     # make temp table
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
-        df_bursts[["epsg", "OGC_FID"]].to_sql("temp_burst_id_map", con, if_exists="replace", index=False)
+        df_bursts[["epsg", "OGC_FID"]].to_sql(
+            "temp_burst_id_map", con, if_exists="replace", index=False
+        )
         con.execute("CREATE INDEX idx_temp on temp_burst_id_map (OGC_FID);")
         # Use the new temp table to update epsgs
         con.execute(
@@ -509,10 +469,11 @@ def make_minimal_db(db_path, output_path):
 
     with sqlite3.connect(output_path) as con:
         df.to_sql("burst_id_map", con, if_exists="replace", index=False)
-        con.execute("CREATE INDEX idx_burst_id_jpl on burst_id_map (burst_id_jpl);")
+        # Skip making the index since we don't need super fast queries
+        # con.execute("CREATE INDEX idx_burst_id_jpl on burst_id_map (burst_id_jpl);")
 
 
-def get_parser():
+def get_cli_args():
     parser = argparse.ArgumentParser(
         description="Generate frames for Sentinel-1 data",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -528,13 +489,13 @@ def get_parser():
     parser.add_argument(
         "--snap",
         type=float,
-        default=50.0,
+        default=30.0,
         help="Snap the bounding box to the nearest multiple of this value.",
     )
     parser.add_argument(
         "--margin",
         type=float,
-        default=4000.0,
+        default=5000.0,
         help="Add this margin surrounding the bounding box of bursts.",
     )
     parser.add_argument(
@@ -546,13 +507,13 @@ def get_parser():
     parser.add_argument(
         "--target-frame",
         type=int,
-        default=10,
+        default=9,
         help="Number of bursts per frame",
     )
     parser.add_argument(
         "--max-frame",
         type=int,
-        default=12,
+        default=10,
         help="Number of bursts per frame",
     )
     parser.add_argument(
@@ -564,17 +525,17 @@ def get_parser():
     parser.add_argument(
         "--land-buffer-deg",
         type=float,
-        default=0.2,
-        help="If provided, a buffer (in degrees) to indicate that a frame is near land.",
+        default=0.3,
+        help="A buffer (in degrees) to indicate that a frame is near land.",
     )
 
     return parser.parse_args()
 
 
-if __name__ == "__main__":
-    t0 = time.time()
+def main():
+    args = get_cli_args()
 
-    args = get_parser()
+    t0 = time.time()
     target_frame = args.target_frame
     min_frame = args.min_frame
     max_frame = args.max_frame
@@ -619,11 +580,7 @@ if __name__ == "__main__":
         raise ValueError("Must provide a land buffer in degrees")
 
     print("Indicating which bursts are near land...")
-    df_land = make_land_df(
-        args.land_buffer_deg,
-        outname=f"usgs_land_{args.land_buffer_deg}deg_buffered.geojson",
-        driver="GeoJSON",
-    )
+    df_land = get_land_df(args.land_buffer_deg)
     land_geom = df_land.geometry
 
     is_in_land = get_land_indicator(df_burst_triplet, land_geom)
@@ -673,3 +630,6 @@ if __name__ == "__main__":
 
     tf = time.time()
     print(f"Total time: {tf - t0:.2f} seconds")
+
+if __name__ == "__main__":
+    main()

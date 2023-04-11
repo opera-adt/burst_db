@@ -94,19 +94,19 @@ def _badness(i, j, target=TARGET_FRAME, max_frame=MAX_FRAME, min_frame=MIN_FRAME
         return math.floor(abs((n + 1) - target)) ** 3
 
 
-def _buffer_small_frames(indicator, min_frame=MIN_FRAME):
-    indicator2 = indicator.copy()
+def buffer_small_frames(indicator, min_frame=MIN_FRAME):
+    ind = indicator.copy()
     ii = 0
     for k, v in groupby(indicator):
         n_frames = len(list(v))
         ii += n_frames
         if k and n_frames < min_frame:
-            indicator2[ii - min_frame // 2 : ii + min_frame // 2 + 1] = True
+            ind[ii - min_frame // 2 : ii + min_frame // 2 + 1] = True
 
     consecutive_land_frames = Counter()
     land_slices = []
     ii, i_prev = 0, 0
-    for k, v in groupby(indicator2):
+    for k, v in groupby(ind):
         n_frames = len(list(v))
         i_prev = ii
         ii += n_frames
@@ -115,7 +115,7 @@ def _buffer_small_frames(indicator, min_frame=MIN_FRAME):
         land_slices.append((i_prev, ii))
         consecutive_land_frames[n_frames] += 1
 
-    return indicator2, consecutive_land_frames, land_slices
+    return ind, consecutive_land_frames, land_slices
 
 
 def _make_frame_tuples(land_slices):
