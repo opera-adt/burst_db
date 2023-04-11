@@ -31,9 +31,9 @@ def solve(n, target=TARGET_FRAME, max_frame=MAX_FRAME, min_frame=MIN_FRAME):
     This is posed as the same problem as the text justification problem.
     "words" == bursts. "lines" == Frames. Where to "break the lines" == "group the frames"
 
-    The differences between here and reference ..[1] are
+    The differences between here and reference [1]_ are
 
-    1. Our "badness" has both a maximum and minumum size, beyond which the
+    1. Our "badness" has both a maximum and minimum size, beyond which the
     badness is infinite.  We also have a "target" so that the majority of
     frames are exactly that size, and only occasionally to we adjust the
     size to be smaller or larger.
@@ -92,7 +92,6 @@ def _badness(i, j, target=TARGET_FRAME, max_frame=MAX_FRAME, min_frame=MIN_FRAME
         return math.inf
     else:
         return math.floor(abs((n + 1) - target)) ** 3
-
 
 
 def _buffer_small_frames(indicator, min_frame=MIN_FRAME):
