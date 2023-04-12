@@ -105,7 +105,7 @@ def make_frame_table(outfile: str):
     """Create the frames table and indexes."""
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
-        con.execute("CREATE TABLE frames " "(fid INTEGER PRIMARY KEY, epsg INTEGER)")
+        con.execute("CREATE TABLE frames " "(fid INTEGER PRIMARY KEY, epsg INTEGER, is_land INTEGER)")
         # https://groups.google.com/g/spatialite-users/c/XcWvAk7vg0c
         # should add geom after the table is created
         # table_name , geometry_column_name , geometry_type , with_z , with_m , srs_id
@@ -115,8 +115,9 @@ def make_frame_table(outfile: str):
 
         # Aggregates burst geometries for each frame into one
         con.execute(
-            """INSERT INTO frames(fid, geom)
+            """INSERT INTO frames(fid, is_land, geom)
             SELECT fb.frame_fid as fid,
+                    fb.is_land,
                     ST_UnaryUnion(ST_Collect(geom)) as geom
             FROM burst_id_map b
             JOIN
@@ -166,6 +167,9 @@ def make_frame_table(outfile: str):
             WHERE frames.fid = frame_orbits.fid;
             """
         )
+
+        # Drop the is_land from the frames_bursts table
+        con.execute("ALTER TABLE frames_bursts DROP COLUMN is_land;")
 
 
 def get_epsg_codes(df: gpd.GeoDataFrame):
