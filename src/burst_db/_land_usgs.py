@@ -4,11 +4,12 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
+import requests
 import unzip_http
+from shapely.geometry import MultiPolygon
 
-USGS_LAND_URL = (
-    "https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-shp-2.3.7.zip"
-)
+USGS_LAND_URL = "https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-shp-2.3.7.zip"  # noqa
+GREENLAND_URL = "https://geodata.lib.utexas.edu/download/file/stanford-sd368wz2435-shapefile.zip"  # noqa
 
 
 def get_usgs_land(outpath=None):
@@ -70,3 +71,29 @@ def get_land_df(
         Path(outname).unlink()
 
     return df_land
+
+
+def get_greenland_shape(outpath=None, buffer_deg=0.2) -> MultiPolygon:
+    f"""Get the Greenland data from {GREENLAND_URL}."""
+    outpath = Path(outpath) if outpath else Path.cwd()
+    outname = outpath / f"greenland_{buffer_deg}deg_buffered.geojson"
+    if outname.exists():
+        print(f"Loading {outname} from disk")
+        return gpd.read_file(outname).iloc[0].geometry
+
+    # download the whole greenland shapefile
+    print("Downloading Greenland shapefile...")
+    r = requests.get(GREENLAND_URL)
+    zipfile = outpath / "greenland.zip"
+    if not zipfile.exists():
+        with open(zipfile, "wb") as fout:
+            fout.write(r.content)
+
+    df = gpd.read_file(zipfile)
+    print("Simplifying and buffering Greenland shapefile...")
+    g = df.iloc[0].geometry
+    # Now simplify first, then buffer
+    gs = g.simplify(0.1)
+    g_buffered = gs.buffer(buffer_deg)
+    # Save for later
+    gpd.GeoDataFrame(geometry=[g_buffered]).to_file(outname, driver="GeoJSON")

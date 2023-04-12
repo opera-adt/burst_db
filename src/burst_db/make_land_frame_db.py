@@ -17,7 +17,7 @@ from burst_db import __version__
 
 from . import frames
 from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
-from ._land_usgs import get_land_df
+from ._land_usgs import get_greenland_shape, get_land_df
 
 
 def make_jpl_burst_id(df):
@@ -71,12 +71,12 @@ def make_burst_triplets(df_burst):
     return df_burst_triplet
 
 
-def get_land_indicator(df_burst_triplet: pd.DataFrame, land_geom):
-    tree = STRtree(df_burst_triplet.geometry)
+def get_land_indicator(gdf: gpd.GeoDataFrame, land_geom):
+    tree = STRtree(gdf.geometry)
     idxs_land = tree.query(land_geom, predicate="intersects")
     if idxs_land.ndim == 2:
         idxs_land = idxs_land[1]
-    is_in_land = df_burst_triplet.index.isin(idxs_land)
+    is_in_land = gdf.index.isin(idxs_land)
     return is_in_land
 
 
@@ -162,7 +162,7 @@ def make_frame_table(outfile):
         )
 
 
-def get_epsg_codes(df):
+def get_epsg_codes(df: gpd.GeoDataFrame):
     """Get the EPSG codes for all non-antimeridian polygons in a GeoDataFrame.
 
     Uses the UTM library to account for the oddities of the Zones near Norway [1]_.
@@ -200,7 +200,6 @@ def get_epsg_codes(df):
     north_idxs = ys[utm_idxs] > 0
 
     # North hemisphere
-
     zones_north = [
         utm.from_latlon(y, x)[2]
         for (y, x) in zip(ys[utm_idxs][north_idxs], xs[utm_idxs][north_idxs])
@@ -209,13 +208,19 @@ def get_epsg_codes(df):
     epsgs[idxs] = 32600 + np.array(zones_north)
 
     # South hemisphere
-
     zones_south = [
         utm.from_latlon(y, x)[2]
         for (y, x) in zip(ys[utm_idxs][~north_idxs], xs[utm_idxs][~north_idxs])
     ]
     idxs = np.logical_and.reduce((~am_idxs, ys_full_size > -60, ys_full_size < 0))
     epsgs[idxs] = 32700 + np.array(zones_south)
+
+    # Set all Greenland frames to EPSG:3413
+    geom_greenland = get_greenland_shape()
+    is_in_greenland = get_land_indicator(df, geom_greenland)
+    print(f"{is_in_greenland.sum()} frames are in Greenland. Setting to EPSG:3413")
+    epsgs[is_in_greenland] = 3413
+
     return epsgs
 
 
