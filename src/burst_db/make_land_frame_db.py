@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import datetime
 import sqlite3
 import time
 from pathlib import Path
@@ -11,10 +12,10 @@ from shapely import STRtree
 from shapely.affinity import translate
 import utm  # https://github.com/Turbo87/utm
 
-
 from . import frames
 from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
 from ._land_usgs import get_land_df
+from burst_db import __version__
 
 
 def make_jpl_burst_id(df):
@@ -75,7 +76,6 @@ def get_land_indicator(df_burst_triplet: pd.DataFrame, land_geom):
         idxs_land = idxs_land[1]
     is_in_land = df_burst_triplet.index.isin(idxs_land)
     return is_in_land
-
 
 
 def make_frame_to_burst_table(outfile, df_frame_to_burst_id):
@@ -290,7 +290,6 @@ def update_burst_epsg(outfile):
         con.execute(sql)
 
 
-
 def add_gpkg_spatial_ref_sys(outfile):
     epsgs = [3031, 3413, 4326] + list(range(32601, 32661)) + list(range(32701, 32761))
     with sqlite3.connect(outfile) as con:
@@ -402,6 +401,26 @@ def make_minimal_db(db_path, output_path):
         df.to_sql("burst_id_map", con, if_exists="replace", index=False)
         # Skip making the index since we don't need super fast queries
         # con.execute("CREATE INDEX idx_burst_id_jpl on burst_id_map (burst_id_jpl);")
+
+
+def create_metadata_table(db_path, args):
+    """Make the metadata table with the arguments used to create the database."""
+    df = pd.DataFrame(
+        [
+            {
+                "margin": args.margin,
+                "snap": args.snap,
+                "min_frame": args.min_frame,
+                "target_frame": args.target_frame,
+                "max_frame": args.max_frame,
+                "version": __version__,
+                "land_buffer_deg": args.land_buffer_deg,
+                "last_modified": datetime.datetime.now().isoformat(),
+            }
+        ]
+    )
+    with sqlite3.connect(db_path) as con:
+        df.to_sql("metadata", con, if_exists="replace", index=False)
 
 
 def get_cli_args():
@@ -556,8 +575,11 @@ def main():
     print(f"Creating a epsg/bbox only version: {out_minimal}")
     make_minimal_db(outfile, out_minimal)
 
-    tf = time.time()
-    print(f"Total time: {tf - t0:.2f} seconds")
+    # Add metadata to each
+    create_metadata_table(outfile, args)
+    create_metadata_table(out_minimal, args)
+
+    print(f"Total time: {time.time() - t0:.2f} seconds")
 
 
 if __name__ == "__main__":
