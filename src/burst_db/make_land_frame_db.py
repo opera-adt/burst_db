@@ -591,7 +591,7 @@ def main():
 
     # Make the minimal version of the DB
     ext = Path(outfile).suffix
-    out_minimal = outfile.replace(ext, f"_bbox_only{ext}")
+    out_minimal = outfile.replace(ext, f"-bbox-only{ext}")
     print(f"Creating a epsg/bbox only version: {out_minimal}")
     make_minimal_db(outfile, out_minimal)
 
