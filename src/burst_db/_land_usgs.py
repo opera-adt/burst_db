@@ -97,3 +97,4 @@ def get_greenland_shape(outpath=None, buffer_deg=0.2) -> MultiPolygon:
     g_buffered = gs.buffer(buffer_deg)
     # Save for later
     gpd.GeoDataFrame(geometry=[g_buffered]).to_file(outname, driver="GeoJSON")
+    return g_buffered
