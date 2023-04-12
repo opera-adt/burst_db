@@ -540,8 +540,8 @@ def main():
     print("Defining frames - bursts JOIN table")
     df_frame_to_burst_id = frames.create_frame_to_burst_mapping(
         is_in_land,
-        min_frame=args.min_frame,
         target_frame=args.target_frame,
+        min_frame=args.min_frame,
         max_frame=args.max_frame,
     )
     make_frame_to_burst_table(outfile, df_frame_to_burst_id)

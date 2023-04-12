@@ -1,8 +1,13 @@
 import math
 from collections import Counter, namedtuple
+from functools import lru_cache
 from itertools import groupby
 from typing import List
+
+from itertools import repeat
+from concurrent.futures import ProcessPoolExecutor
 import pandas as pd
+from tqdm.auto import tqdm
 
 MIN_FRAME = 5
 MAX_FRAME = 12
@@ -12,27 +17,38 @@ FrameSlice = namedtuple("FrameSlice", ["start_idx", "end_idx", "is_land"])
 
 
 def create_frame_to_burst_mapping(
-    is_in_land: pd.Index, min_frame: int, target_frame: int, max_frame: int
+    is_in_land, target_frame: int, min_frame: int, max_frame: int
 ) -> pd.DataFrame:
     """Create the JOIN table between frames_number and burst_id."""
     frame_slices = create_frame_slices(is_in_land, min_frame=min_frame)
 
-    cumulative_slice_idxs = []
-    for start_idx, end_idx, is_land in frame_slices:
-        cur_slices = solve(
-            end_idx - start_idx,
-            target=target_frame,
-            min_frame=min_frame,
-            max_frame=max_frame,
+    # parallelize the solve function calls
+    with ProcessPoolExecutor() as executor:
+        cumulative_slice_idxs = list(
+            tqdm(
+                executor.map(
+                    _process_slice,
+                    frame_slices,
+                    repeat(target_frame),
+                    repeat(min_frame),
+                    repeat(max_frame),
+                ),
+                desc="Solving frame sizes",
+                total=len(frame_slices),
+            )
         )
-        # bump up so they refer to rows, instead of being from 0
-        cur_slices = [(s + start_idx, e + start_idx, is_land) for (s, e) in cur_slices]
-        cumulative_slice_idxs.extend(cur_slices)
+
+    # Flatten the list of lists, since each result from executor.map is a list
+    cumulative_slice_idxs = sorted(
+        [item for sublist in cumulative_slice_idxs for item in sublist]
+    )
 
     # Create the frame IDs mapping to burst_id
     # (frame_id, OGC_FID)
     frame_ogc_fid_tuples = []
-    for frame_id, (start_idx, end_idx, is_land) in enumerate(frame_slices, start=1):
+    for frame_id, (start_idx, end_idx, is_land) in enumerate(
+        cumulative_slice_idxs, start=1
+    ):
         for burst_id in range(start_idx + 1, end_idx + 1):
             for ogc_fid in range(1 + 3 * (burst_id - 1), 4 + 3 * (burst_id - 1)):
                 frame_ogc_fid_tuples.append((frame_id, ogc_fid, is_land))
@@ -43,6 +59,20 @@ def create_frame_to_burst_mapping(
     return df_frame_to_burst_id
 
 
+def _process_slice(slice_info, target_frame, min_frame, max_frame):
+    start_idx, end_idx, is_land = slice_info
+    n = end_idx - start_idx
+    cur_slices = solve(
+        n,
+        target=target_frame,
+        min_frame=min_frame,
+        max_frame=max_frame,
+    )
+    # bump up so they refer to rows, instead of being from 0
+    return [(s + start_idx, e + start_idx, is_land) for (s, e) in cur_slices]
+
+
+@lru_cache(maxsize=1000)
 def solve(n, target=TARGET_FRAME, max_frame=MAX_FRAME, min_frame=MIN_FRAME):
     """Solve the dynamic programming problem to find the best frame sizes.
 
@@ -169,9 +199,11 @@ def create_frame_slices(is_land_indicator, min_frame=MIN_FRAME) -> List[FrameSli
         else:
             consecutive_water_frames[n_frames] += 1
 
-    print("Number of occurrences with smallest consecutive land frames:")
-    print(sorted(consecutive_land_frames.items())[:20])
-    print("Number of occurrences with smallest consecutive water frames:")
-    print(sorted(consecutive_water_frames.items())[:20])
+    print("Number of occurrences with consecutive land bursts:")
+    print(sorted(consecutive_land_frames.items())[:5], end=",... ")
+    print(sorted(consecutive_land_frames.items())[-5:])
+    print("Number of occurrences with consecutive water bursts:")
+    print(sorted(consecutive_water_frames.items())[:5], end=",... ")
+    print(sorted(consecutive_water_frames.items())[-5:])
 
     return frame_slices
