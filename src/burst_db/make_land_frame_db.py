@@ -8,14 +8,16 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import utm  # https://github.com/Turbo87/utm
 from shapely import STRtree
 from shapely.affinity import translate
-import utm  # https://github.com/Turbo87/utm
+from tqdm.auto import tqdm
+
+from burst_db import __version__
 
 from . import frames
 from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
 from ._land_usgs import get_land_df
-from burst_db import __version__
 
 
 def make_jpl_burst_id(df):
@@ -295,7 +297,7 @@ def add_gpkg_spatial_ref_sys(outfile):
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
         sql = "SELECT gpkgInsertEpsgSRID({epsg});"
-        for epsg in epsgs:
+        for epsg in tqdm(epsgs):
             try:
                 con.execute(sql.format(epsg=epsg))
             except (sqlite3.OperationalError, sqlite3.IntegrityError):

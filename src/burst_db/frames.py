@@ -1,11 +1,10 @@
 import math
 from collections import Counter, namedtuple
+from concurrent.futures import ProcessPoolExecutor
 from functools import lru_cache
-from itertools import groupby
+from itertools import groupby, repeat
 from typing import List
 
-from itertools import repeat
-from concurrent.futures import ProcessPoolExecutor
 import pandas as pd
 from tqdm.auto import tqdm
 
