@@ -9,7 +9,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import utm  # https://github.com/Turbo87/utm
-from shapely import STRtree
+from shapely import STRtree, GeometryType
 from shapely.affinity import translate
 from tqdm.auto import tqdm
 
@@ -20,7 +20,8 @@ from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
 from ._land_usgs import get_greenland_shape, get_land_df
 
 
-def make_jpl_burst_id(df):
+def make_jpl_burst_id(df: pd.DataFrame):
+    """Make the JPL burst ID from the ESA burst ID."""
     burst_id_jpl = (
         "t"
         + df["relative_orbit_number"].astype(str).str.zfill(3)
@@ -32,7 +33,8 @@ def make_jpl_burst_id(df):
     return burst_id_jpl
 
 
-def _setup_spatialite_con(con):
+def _setup_spatialite_con(con: sqlite3.Connection):
+    """Enable spatialite and load the spatialite extension."""
     con.enable_load_extension(True)
     # Try the two versions, mac and linux with .so
     try:
@@ -44,7 +46,8 @@ def _setup_spatialite_con(con):
     con.execute("SELECT EnableGpkgAmphibiousMode();")
 
 
-def make_burst_triplets(df_burst):
+def make_burst_triplets(df_burst: pd.DataFrame) -> pd.DataFrame:
+    """Make a burst triplets dataframe, aggregating IW1,2,3 from the burst dataframe."""
     def join_track_numbers(orbits: list) -> str:
         orbits = list(set(orbits))
         orbits_str = list(map(str, orbits))
@@ -71,7 +74,8 @@ def make_burst_triplets(df_burst):
     return df_burst_triplet
 
 
-def get_land_indicator(gdf: gpd.GeoDataFrame, land_geom):
+def get_land_indicator(gdf: gpd.GeoDataFrame, land_geom: GeometryType.POLYGON):
+    """Get a boolean array indicating if each row of `gdf` intersects `land_geom`."""
     tree = STRtree(gdf.geometry)
     idxs_land = tree.query(land_geom, predicate="intersects")
     if idxs_land.ndim == 2:
@@ -80,7 +84,8 @@ def get_land_indicator(gdf: gpd.GeoDataFrame, land_geom):
     return is_in_land
 
 
-def make_frame_to_burst_table(outfile, df_frame_to_burst_id):
+def make_frame_to_burst_table(outfile: str, df_frame_to_burst_id: pd.DataFrame):
+    """Create the frames_bursts table and indexes."""
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
 
@@ -96,7 +101,8 @@ def make_frame_to_burst_table(outfile, df_frame_to_burst_id):
         )
 
 
-def make_frame_table(outfile):
+def make_frame_table(outfile: str):
+    """Create the frames table and indexes."""
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
         con.execute("CREATE TABLE frames " "(fid INTEGER PRIMARY KEY, epsg INTEGER)")
@@ -272,6 +278,7 @@ def antimeridian_epsg(mp):
 
 
 def update_burst_epsg(outfile):
+    """Update the EPSG of each burst to match the EPSG of the frame it is in."""
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
         # add index
@@ -298,6 +305,7 @@ def update_burst_epsg(outfile):
 
 
 def add_gpkg_spatial_ref_sys(outfile):
+    """Add all EPSG codes to the gpkg_spatial_ref_sys table."""
     epsgs = [3031, 3413, 4326] + list(range(32601, 32661)) + list(range(32701, 32761))
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
@@ -356,6 +364,7 @@ def add_gpkg_spatial_ref_sys(outfile):
 
 
 def save_utm_bounding_boxes(outfile, margin=4000, snap=50.0):
+    """Save the bounding boxes of each burst in UTM coordinates."""
     try:
         with sqlite3.connect(outfile) as con:
             for col in ["xmin", "ymin", "xmax", "ymax"]:
