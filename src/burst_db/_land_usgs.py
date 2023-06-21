@@ -1,3 +1,6 @@
+'''
+An internal module to download shape files for land are and Greenland
+'''
 import fnmatch
 import zipfile
 from pathlib import Path
@@ -9,7 +12,7 @@ import unzip_http
 from shapely.geometry import MultiPolygon
 
 USGS_LAND_URL = "https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-shp-2.3.7.zip"  # noqa
-GREENLAND_URL = "https://geodata.lib.utexas.edu/download/file/stanford-sd368wz2435-shapefile.zip"  # noqa
+GREENLAND_URL = "https://stacks.stanford.edu/file/druid:sd368wz2435/data.zip"  # noqa  # noqa
 
 
 def get_usgs_land(outpath=None):

@@ -13,7 +13,7 @@ from setuptools import find_packages, setup
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from burst_db.version import release_version
 
-LONG_DESCRIPTION = "Burst database for OPERA SAS"
+LONG_DESCRIPTION = "Sentinel-1 Burst database for OPERA SAS"
 
 setup(
     name="burst_db",
@@ -23,8 +23,8 @@ setup(
     package_dir={"": "src"},  # tell distutils packages are under src
     classifiers=["Programming Language :: Python"],
     url="https://github.com/opera-adt/burst_db",
-    author="Seongsu Jeong",
-    author_email="seongsu.jeong@jpl.nasa.gov",
+    author="Seongsu Jeong; Scott J. Staniewicz",
+    author_email="seongsu.jeong@jpl.nasa.gov; scott.j.staniewicz@jpl.nasa.gov",
     license=(
         "Copyright by the California Institute of Technology. ALL RIGHTS RESERVED."
     ),
