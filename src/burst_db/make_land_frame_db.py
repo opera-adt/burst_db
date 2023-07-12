@@ -74,6 +74,7 @@ def make_burst_triplets(df_burst: pd.DataFrame) -> pd.DataFrame:
     return df_burst_triplet
 
 
+
 def get_land_indicator(gdf: gpd.GeoDataFrame, land_geom: GeometryType.POLYGON):
     """Get a boolean array indicating if each row of `gdf` intersects `land_geom`."""
     tree = STRtree(gdf.geometry)
@@ -493,6 +494,11 @@ def get_cli_args():
         "'s1-frames-{target_frame}frames-{min_frame}min-{max_frame}max.gpkg'",
     )
     parser.add_argument(
+        "--optimize-land",
+        action="store_true",
+        help="Create frames which attempt to minimize the number of majority-water frames",
+    )
+    parser.add_argument(
         "--land-buffer-deg",
         type=float,
         default=0.3,
@@ -563,6 +569,7 @@ def main():
         target_frame=args.target_frame,
         min_frame=args.min_frame,
         max_frame=args.max_frame,
+        optimize_land=args.optimize_land,
     )
     make_frame_to_burst_table(outfile, df_frame_to_burst_id)
 
