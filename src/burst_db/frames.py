@@ -5,7 +5,6 @@ from collections import Counter, namedtuple
 from concurrent.futures import ProcessPoolExecutor
 from functools import lru_cache
 from itertools import groupby, repeat
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -20,11 +19,15 @@ FrameSlice = namedtuple("FrameSlice", ["start_idx", "end_idx", "is_land"])
 
 
 def create_frame_to_burst_mapping(
-    is_in_land: ArrayLike, target_frame: int, min_frame: int, max_frame: int
+    is_in_land: ArrayLike,
+    target_frame: int,
+    min_frame: int,
+    max_frame: int,
+    optimize_land: bool = False,
 ) -> pd.DataFrame:
     """Create the JOIN table between frames_number and burst_id."""
-    if is_in_land is None:
-        cumulative_slice_idxs = _make_simple_frame_slices(len(is_in_land))
+    if not optimize_land:
+        cumulative_slice_idxs = _make_simple_frame_slices(is_in_land)
     else:
         frame_slices = create_frame_slices(is_in_land, min_frame=min_frame)
         # parallelize the solve function calls
@@ -214,7 +217,17 @@ def create_frame_slices(is_land_indicator, min_frame=MIN_FRAME) -> list[FrameSli
     return frame_slices
 
 
-def _make_simple_frame_slices(num_bursts, n_bursts_per_frame=9, overlap=1):
-    N = int(np.ceil(num_bursts / (n_bursts_per_frame - overlap)))
-    starts = [k * (n_bursts_per_frame - overlap) for k in range(N)]
-    return [slice(start, start + n_bursts_per_frame) for start in starts]
+def _make_simple_frame_slices(
+    is_in_land, n_bursts_per_frame=9, overlap=1
+) -> list[FrameSlice]:
+    num_bursts = len(is_in_land)
+    num_frames = int(np.ceil(num_bursts / (n_bursts_per_frame - overlap)))
+    burst_start_idxs = [k * (n_bursts_per_frame - overlap) for k in range(num_frames)]
+
+    frame_slices: list[FrameSlice] = []
+    # for is_land, cur_indicators in groupby(indicator):
+    for start in burst_start_idxs:
+        end = start + n_bursts_per_frame
+        frame_slices.append(FrameSlice(start, end, any(is_in_land[start:end])))
+
+    return frame_slices

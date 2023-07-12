@@ -1,15 +1,17 @@
 #!/usr/bin/env python
 import argparse
 import datetime
+import json
 import sqlite3
 import time
+import zipfile
 from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import utm  # https://github.com/Turbo87/utm
-from shapely import STRtree, GeometryType
+from shapely import GeometryType, STRtree
 from shapely.affinity import translate
 from tqdm.auto import tqdm
 
@@ -48,6 +50,7 @@ def _setup_spatialite_con(con: sqlite3.Connection):
 
 def make_burst_triplets(df_burst: pd.DataFrame) -> pd.DataFrame:
     """Make a burst triplets dataframe, aggregating IW1,2,3 from the burst dataframe."""
+
     def join_track_numbers(orbits: list) -> str:
         orbits = list(set(orbits))
         orbits_str = list(map(str, orbits))
@@ -74,7 +77,6 @@ def make_burst_triplets(df_burst: pd.DataFrame) -> pd.DataFrame:
     return df_burst_triplet
 
 
-
 def get_land_indicator(gdf: gpd.GeoDataFrame, land_geom: GeometryType.POLYGON):
     """Get a boolean array indicating if each row of `gdf` intersects `land_geom`."""
     tree = STRtree(gdf.geometry)
@@ -90,7 +92,7 @@ def make_frame_to_burst_table(outfile: str, df_frame_to_burst_id: pd.DataFrame):
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
 
-        df_frame_to_burst_id.to_sql("frames_bursts", con)
+        df_frame_to_burst_id.to_sql("frames_bursts", con, if_exists="replace")
         con.execute(
             "CREATE INDEX IF NOT EXISTS idx_frames_bursts_burst_ogc_fid ON frames_bursts (burst_ogc_fid)"
         )
@@ -106,7 +108,10 @@ def make_frame_table(outfile: str):
     """Create the frames table and indexes."""
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
-        con.execute("CREATE TABLE frames " "(fid INTEGER PRIMARY KEY, epsg INTEGER, is_land INTEGER)")
+        con.execute(
+            "CREATE TABLE frames "
+            "(fid INTEGER PRIMARY KEY, epsg INTEGER, is_land INTEGER)"
+        )
         # https://groups.google.com/g/spatialite-users/c/XcWvAk7vg0c
         # should add geom after the table is created
         # table_name , geometry_column_name , geometry_type , with_z , with_m , srs_id
@@ -370,6 +375,7 @@ def add_gpkg_spatial_ref_sys(outfile):
 
 def save_utm_bounding_boxes(outfile, margin=4000, snap=50.0):
     """Save the bounding boxes of each burst in UTM coordinates."""
+    print("Saving UTM bounding boxes...")
     try:
         with sqlite3.connect(outfile) as con:
             for col in ["xmin", "ymin", "xmax", "ymax"]:
@@ -406,11 +412,15 @@ WHERE burst_id_map.OGC_FID = bboxes.OGC_FID ;
         con.execute(sql)
 
 
-def make_minimal_db(db_path, output_path):
-    """Make a minimal database with only the burst_id_jpl, epsg, and bbox columns."""
+def make_minimal_db(db_path, df_frame_to_burst_id, output_path):
+    """Make a minimal database with only the following columns:
+
+    burst_id_jpl, epsg, xmin, ymin, ymax, ymax, frame_ids
+    """
     with sqlite3.connect(db_path) as con:
         df = pd.read_sql_query(
-            "SELECT burst_id_jpl, epsg, xmin, ymin, xmax, ymax FROM burst_id_map", con
+            "SELECT OGC_FID, burst_id_jpl, epsg, xmin, ymin, xmax, ymax FROM burst_id_map",
+            con,
         )
     # Make sure snapped coordinates as integers (~40% smaller than REAL)
     df["xmin"] = df["xmin"].astype(int)
@@ -420,8 +430,52 @@ def make_minimal_db(db_path, output_path):
 
     with sqlite3.connect(output_path) as con:
         df.to_sql("burst_id_map", con, if_exists="replace", index=False)
-        # Skip making the index since we don't need super fast queries
-        # con.execute("CREATE INDEX idx_burst_id_jpl on burst_id_map (burst_id_jpl);")
+
+    # Make a version which has the list of frames each burst belongs to
+    df_burst_to_frames = _get_burst_to_frame_list(df_frame_to_burst_id)
+    df_out = pd.merge(
+        df, df_burst_to_frames, how="inner", left_on="OGC_FID", right_on="burst_ogc_fid"
+    )
+    df_out.drop(columns=("OGC_FID"), inplace=True)
+
+    dict_out = df_out.set_index("burst_id_jpl").to_dict(orient="index")
+    # Format:
+    # ('t001_000001_iw1', {'epsg': 32631, 'xmin': 531360, 'ymin': 78240,
+    # 'xmax': 630690, 'ymax': 128280, 'frame_fid': [1]})
+    # Convert to ('t001_000001_iw1', (32631, 531360, 78240, 630690, 128280, [1]))
+    dict_out = {k: tuple(v.values()) for k, v in dict_out.items()}
+    json_path = Path(output_path).with_suffix(".json")
+
+    with open(json_path, "w") as f:
+        json.dump(dict_out, f)
+    # Zip up the text file
+    with zipfile.ZipFile(
+        str(json_path) + ".zip", "w", compression=zipfile.ZIP_DEFLATED, compresslevel=8
+    ) as zf:
+        zf.write(json_path)
+    # Remove the uncompressed version
+    json_path.unlink()
+
+
+def _get_burst_to_frame_list(df_frame_to_burst_id):
+    """Get a DataFrame which maps the burst ID to the list of frames
+    containing the burst.
+
+    Example:
+                frame_fid
+    burst_ogc_fid
+    ...
+    24                  [1]
+    25               [1, 2]
+    26               [1, 2]
+    27               [1, 2]
+    28                  [2]
+    """
+    return (
+        df_frame_to_burst_id[["burst_ogc_fid", "frame_fid"]]
+        .groupby("burst_ogc_fid")
+        .agg(list)
+    )
 
 
 def create_metadata_table(db_path, args):
@@ -470,33 +524,33 @@ def get_cli_args():
         help="Add this margin surrounding the bounding box of bursts.",
     )
     parser.add_argument(
-        "--min-frame",
-        type=int,
-        default=5,
-        help="Number of bursts per frame",
+        "--optimize-land",
+        action="store_true",
+        help="Create frames which attempt to minimize the number of majority-water frames",
     )
     parser.add_argument(
         "--target-frame",
         type=int,
         default=9,
-        help="Number of bursts per frame",
+        help="Target number of bursts per frame.",
+    )
+    parser.add_argument(
+        "--min-frame",
+        type=int,
+        default=5,
+        help="(If using `--optimize-land`): Minimum number of bursts per frame",
     )
     parser.add_argument(
         "--max-frame",
         type=int,
         default=10,
-        help="Number of bursts per frame",
+        help="(If using `--optimize-land`): Maximum number of bursts per frame",
     )
     parser.add_argument(
         "-o",
         "--outfile",
         help="Output file name (default is "
         "'s1-frames-{target_frame}frames-{min_frame}min-{max_frame}max.gpkg'",
-    )
-    parser.add_argument(
-        "--optimize-land",
-        action="store_true",
-        help="Create frames which attempt to minimize the number of majority-water frames",
     )
     parser.add_argument(
         "--land-buffer-deg",
@@ -516,7 +570,10 @@ def main():
     min_frame = args.min_frame
     max_frame = args.max_frame
     if not args.outfile:
-        basename = f"s1-frames-{target_frame}frames-{min_frame}min-{max_frame}max"
+        if args.optimize_land:
+            basename = f"s1-frames-{target_frame}frames-{min_frame}min-{max_frame}max"
+        else:
+            basename = f"s1-frames-simple-{target_frame}frames"
         outfile = f"{basename}.gpkg"
     else:
         outfile = args.outfile
@@ -541,20 +598,19 @@ def main():
     df_burst.loc[:, "epsg"] = 0
 
     # Start the outfile with the ESA database contents
-    print("Saving initial version")
+    print("Saving initial version of `burst_id_map` table")
     df_burst.set_index("OGC_FID").to_file(
         outfile, driver="GPKG", layer="burst_id_map", index=False
     )
     # Adjust the primary key so it still matches original OGC_FID
+    print("Renaming index column from 'fid' to 'OGC_FID'")
     with sqlite3.connect(outfile) as con:
         con.execute("ALTER TABLE burst_id_map RENAME COLUMN fid TO OGC_FID;")
 
     print("Aggregating burst triplets (grouping IW1,2,3 geometries together)")
     df_burst_triplet = make_burst_triplets(df_burst)
-    # Get the land polygon to intersect
-    if args.land_buffer_deg is None:
-        raise ValueError("Must provide a land buffer in degrees")
 
+    # Get the land polygon to intersect
     print("Indicating which bursts are near land...")
     df_land = get_land_df(args.land_buffer_deg)
     land_geom = df_land.geometry
@@ -600,7 +656,11 @@ def main():
     ext = Path(outfile).suffix
     out_minimal = outfile.replace(ext, f"-bbox-only{ext}")
     print(f"Creating a epsg/bbox only version: {out_minimal}")
-    make_minimal_db(outfile, out_minimal)
+    make_minimal_db(
+        db_path=outfile,
+        df_frame_to_burst_id=df_frame_to_burst_id,
+        output_path=out_minimal,
+    )
 
     # Add metadata to each
     create_metadata_table(outfile, args)
