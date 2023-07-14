@@ -412,10 +412,12 @@ WHERE burst_id_map.OGC_FID = bboxes.OGC_FID ;
         con.execute(sql)
 
 
-def make_minimal_db(db_path, df_frame_to_burst_id, output_path):
+def make_minimal_db(db_path, df_frame_to_burst_id, output_path, out_burst_to_frame):
     """Make a minimal database with only the following columns:
 
     burst_id_jpl, epsg, xmin, ymin, ymax, ymax, frame_ids
+    and a zip file with:
+    {burst_id_jpl: (epsg, xmin, ymin, ymax, ymax, frame_ids),...}
     """
     with sqlite3.connect(db_path) as con:
         df = pd.read_sql_query(
@@ -444,17 +446,39 @@ def make_minimal_db(db_path, df_frame_to_burst_id, output_path):
     # 'xmax': 630690, 'ymax': 128280, 'frame_fid': [1]})
     # Convert to ('t001_000001_iw1', (32631, 531360, 78240, 630690, 128280, [1]))
     dict_out = {k: tuple(v.values()) for k, v in dict_out.items()}
-    json_path = Path(output_path).with_suffix(".json")
+    _write_zipped_json(out_burst_to_frame, dict_out)
 
+
+def make_frame_to_burst_json(db_path, output_path):
+    with sqlite3.connect(db_path) as con:
+        df_frame_to_burst = pd.read_sql_query(
+            """
+            SELECT frames.fid AS frame_id, GROUP_CONCAT(burst_id_jpl) AS burst_ids 
+            FROM frames JOIN frames_bursts fb on fb.frame_fid = frames.fid 
+            JOIN burst_id_map b ON fb.burst_ogc_fid = b.ogc_fid 
+            GROUP BY 1;
+        """,
+            con,
+        )
+    df_frame_to_burst.burst_ids = df_frame_to_burst.burst_ids.str.split(",")
+    d2 = df_frame_to_burst.set_index("frame_id").to_dict(orient="index")
+    dict_out = {k: v["burst_ids"] for k, v in d2.items()}
+    _write_zipped_json(output_path, dict_out)
+
+
+def _write_zipped_json(json_path, dict_out, level: int = 6):
     with open(json_path, "w") as f:
         json.dump(dict_out, f)
     # Zip up the text file
     with zipfile.ZipFile(
-        str(json_path) + ".zip", "w", compression=zipfile.ZIP_DEFLATED, compresslevel=8
+        str(json_path) + ".zip",
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=level,
     ) as zf:
         zf.write(json_path)
     # Remove the uncompressed version
-    json_path.unlink()
+    Path(json_path).unlink()
 
 
 def _get_burst_to_frame_list(df_frame_to_burst_id):
@@ -652,15 +676,20 @@ def main():
     add_gpkg_spatial_ref_sys(outfile)
     save_utm_bounding_boxes(outfile, margin=args.margin, snap=args.snap)
 
-    # Make the minimal version of the DB
+    # # Make the minimal version of the DB
     ext = Path(outfile).suffix
     out_minimal = outfile.replace(ext, f"-bbox-only{ext}")
+    out_burst_to_frame = outfile.replace(ext, f"-burst-to-frame.json")
     print(f"Creating a epsg/bbox only version: {out_minimal}")
     make_minimal_db(
         db_path=outfile,
         df_frame_to_burst_id=df_frame_to_burst_id,
         output_path=out_minimal,
+        out_burst_to_frame=out_burst_to_frame,
     )
+
+    out_frame_to_burst = outfile.replace(ext, f"-frame-to-burst.json")
+    make_frame_to_burst_json(db_path=outfile, output_path=out_frame_to_burst)
 
     # Add metadata to each
     create_metadata_table(outfile, args)
