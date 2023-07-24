@@ -83,8 +83,9 @@ The burst-to-frame mapping has the structure
     }
 }
 ```
+These data structures can be read into python using the function `make_land_frame_db.read_zipped_json` .
 
-The `opera-create-db` command also makes the full Geopackage database, where the `burst_id_map` table contains the Burst geometries, the `frames` table contains the frame geometries, and the `frames_bursts` table is the JOIN table for the many-to-many relationship.
+The `opera-create-db` command also makes the full [Geopackage database](https://www.geopackage.org/) (which is based on sqlite), where the `burst_id_map` table contains the burst geometries, the `frames` table contains the frame geometries, and the `frames_bursts` table is the JOIN table for the many-to-many relationship.
 An example SQL query to view all columns of these tables is
 ```sql
 SELECT *
