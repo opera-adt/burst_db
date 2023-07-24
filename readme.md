@@ -45,26 +45,26 @@ After running `pip install .` , the `opera-create-db` command will create the sq
 The format of the frame-to-burst mapping is
 ```json
 {
-    'data' : {
-        '1': {
-            'epsg': 32631,
-            'is_land': False,
-            'xmin': 500160,
-            'ymin': 78240,
-            'xmax': 789960,
-            'ymax': 322740,
-            'burst_ids': [
-                't001_000001_iw1',
-                't001_000001_iw2',
-                't001_000001_iw3',
-                't001_000002_iw1',
+    "data" : {
+        "1": {
+            "epsg": 32631,
+            "is_land": False,
+            "xmin": 500160,
+            "ymin": 78240,
+            "xmax": 789960,
+            "ymax": 322740,
+            "burst_ids": [
+                "t001_000001_iw1",
+                "t001_000001_iw2",
+                "t001_000001_iw3",
+                "t001_000002_iw1",
                 ...
-                't001_000009_iw3'
+                "t001_000009_iw3"
             ]
         }, ...
     },
-    'metadata': {
-        'version': '0.1.2', 'margin': 5000.0, ...
+    "metadata": {
+        "version": "0.1.2", "margin": 5000.0, ...
     }
 }
 ```
@@ -73,13 +73,13 @@ where the keys of the the `data` dict are the frame IDs.
 The burst-to-frame mapping has the structure
 ```json
 {
-    'data' : {
-        't001_000001_iw1': {'frame_ids': [1]},
-        't001_000001_iw2': {'frame_ids': [1]},
+    "data" : {
+        "t001_000001_iw1": {"frame_ids": [1]},
+        "t001_000001_iw2": {"frame_ids": [1]},
         ...
     },
-    'metadata': {
-        'version': '0.1.2', 'margin': 5000.0, ...
+    "metadata": {
+        "version": "0.1.2", "margin": 5000.0, ...
     }
 }
 ```
