@@ -109,8 +109,7 @@ def make_frame_table(outfile: str):
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
         con.execute(
-            "CREATE TABLE frames "
-            "(fid INTEGER PRIMARY KEY, epsg INTEGER, is_land INTEGER)"
+            "CREATE TABLE frames (fid INTEGER PRIMARY KEY, epsg INTEGER, is_land INTEGER)"
         )
         # https://groups.google.com/g/spatialite-users/c/XcWvAk7vg0c
         # should add geom after the table is created
@@ -443,10 +442,12 @@ def make_minimal_db(db_path, df_frame_to_burst_id, output_path):
 
 
 def make_burst_to_frame_json(df, output_path: str, metadata: dict):
-    data_dict = df.set_index("burst_id_jpl").to_dict(orient="index")
-    # Format:
-    # ('t001_000001_iw1', {'epsg': 32631, 'xmin': 531360, 'ymin': 78240,
-    # 'xmax': 630690, 'ymax': 128280, 'frame_fid': [1]})
+    data_dict = (
+        df.set_index("burst_id_jpl")[["frame_fid"]]
+        .rename(columns={"frame_fid": "frame_ids"})
+        .to_dict(orient="index")
+    )
+    # Format:  {'t001_000001_iw1': [1], ...}
     dict_out = {"data": data_dict, "metadata": metadata}
     _write_zipped_json(output_path, dict_out)
 
@@ -458,6 +459,7 @@ def make_frame_to_burst_json(db_path: str, output_path: str, metadata: dict):
             SELECT
                 f.fid AS frame_id,
                 f.epsg,
+                f.is_land,
                 MIN(xmin) AS xmin,
                 MIN(ymin) AS ymin,
                 MAX(xmax) AS xmax,
@@ -471,6 +473,7 @@ def make_frame_to_burst_json(db_path: str, output_path: str, metadata: dict):
             con,
         )
     df_frame_to_burst.burst_ids = df_frame_to_burst.burst_ids.str.split(",")
+    df_frame_to_burst.is_land = df_frame_to_burst.is_land.astype(bool)
     data_dict = df_frame_to_burst.set_index("frame_id").to_dict(orient="index")
     dict_out = {"data": data_dict, "metadata": metadata}
 
@@ -514,14 +517,19 @@ def _get_burst_to_frame_list(df_frame_to_burst_id):
 
 
 def _get_metadata(args):
-    return {
+    base = {
         "margin": args.margin,
         "snap": args.snap,
         "target_frame_size": args.target_frame,
         "version": __version__,
-        "land_buffer_deg": args.land_buffer_deg,
         "last_modified": datetime.datetime.now().isoformat(),
+        "land_buffer_deg": args.land_buffer_deg,
+        "land_optimized": args.optimize_land,
     }
+    if args.optimize_land:
+        base["min_frame_size"] = args.min_frame
+        base["max_frame_size"] = args.max_frame
+    return base
 
 
 def create_metadata_table(db_path, metadata):
@@ -588,8 +596,7 @@ def get_cli_args():
     parser.add_argument(
         "-o",
         "--outfile",
-        help="Output file name (default is "
-        "'opera-s1-frames-{target_frame}frames-{min_frame}min-{max_frame}max.gpkg'",
+        help="Output file name (default is 'opera-s1-disp.gpkg'",
     )
     parser.add_argument(
         "--land-buffer-deg",
@@ -609,12 +616,12 @@ def main():
     min_frame = args.min_frame
     max_frame = args.max_frame
     if not args.outfile:
-        if args.optimize_land:
+        if not args.optimize_land:
+            basename = "opera-s1-disp"
+        else:
             basename = (
                 f"opera-s1-frames-{target_frame}frames-{min_frame}min-{max_frame}max"
             )
-        else:
-            basename = f"opera-s1-frames-simple-{target_frame}frames"
         outfile = f"{basename}.gpkg"
     else:
         outfile = args.outfile

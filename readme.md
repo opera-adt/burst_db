@@ -10,19 +10,20 @@ Follow the steps below to install `burst_db` using conda environment.
 
 ```bash
 git clone https://github.com/opera-adt/burst_db burst_db
+cd burst_db
 ```
 
 2. Install dependencies:
 
 ```bash
-conda install -c conda-forge --file burst_db/requirements.txt
+conda install -c conda-forge --file environment.yml
 ```
 
 3. Install `burst_db` via pip:
 
 ```bash
 # run "pip install -e" to install in development mode
-python -m pip install ./burst_db
+python -m pip install .
 ```
 
 ## How to use
@@ -35,6 +36,64 @@ python -m pip install ./burst_db
 - `-d` : (Optional) Smaller version of the DB will be saved to the path `DEPLOYABLE`
 - `sqlite_path_in` : Path to the source SQLite database file for Sentinel-1 burst map released by ESA. The data can be downloaded from [here](https://sar-mpc.eu/files/S1_burstid_20220530.zip).
 - `sqlite_path_out` : Path to the output SQLite database file.
+
+
+## Frame database information
+
+After running `pip install .` , the `opera-create-db` command will create the sqlite Frame Database, as well as JSON files which map the burst IDs to frame IDs, and frame IDs to burst IDs.
+
+The format of the frame-to-burst mapping is
+```json
+{
+    'data' : {
+        '1': {
+            'epsg': 32631,
+            'is_land': False,
+            'xmin': 500160,
+            'ymin': 78240,
+            'xmax': 789960,
+            'ymax': 322740,
+            'burst_ids': [
+                't001_000001_iw1',
+                't001_000001_iw2',
+                't001_000001_iw3',
+                't001_000002_iw1',
+                ...
+                't001_000009_iw3'
+            ]
+        }, ...
+    },
+    'metadata': {
+        'version': '0.1.2', 'margin': 5000.0, ...
+    }
+}
+```
+where the keys of the the `data` dict are the frame IDs.
+
+The burst-to-frame mapping has the structure
+```json
+{
+    'data' : {
+        't001_000001_iw1': {'frame_ids': [1]},
+        't001_000001_iw2': {'frame_ids': [1]},
+        ...
+    },
+    'metadata': {
+        'version': '0.1.2', 'margin': 5000.0, ...
+    }
+}
+```
+
+The `opera-create-db` command also makes the full Geopackage database, where the `burst_id_map` table contains the Burst geometries, the `frames` table contains the frame geometries, and the `frames_bursts` table is the JOIN table for the many-to-many relationship.
+An example SQL query to view all columns of these tables is
+```sql
+SELECT *
+FROM frames f
+JOIN frames_bursts fb ON fb.frame_fid = f.fid
+JOIN burst_id_map b ON fb.burst_ogc_fid = b.ogc_fid
+LIMIT 1;
+```
+You can also drag the `opera-s1-disp.gpkg` file into QGIS to load the `frames` and `burst_id_map` tables to filter/view the geometries.
 
 
 ### License
