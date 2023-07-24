@@ -443,12 +443,10 @@ def make_minimal_db(db_path, df_frame_to_burst_id, output_path):
 
 
 def make_burst_to_frame_json(df, output_path: str, metadata: dict):
-    dict_out = df.set_index("burst_id_jpl").to_dict(orient="index")
+    data_dict = df.set_index("burst_id_jpl").to_dict(orient="index")
     # Format:
     # ('t001_000001_iw1', {'epsg': 32631, 'xmin': 531360, 'ymin': 78240,
     # 'xmax': 630690, 'ymax': 128280, 'frame_fid': [1]})
-    # Convert to ('t001_000001_iw1', (32631, 531360, 78240, 630690, 128280, [1]))
-    data_dict = {k: tuple(v.values()) for k, v in dict_out.items()}
     dict_out = {"data": data_dict, "metadata": metadata}
     _write_zipped_json(output_path, dict_out)
 
@@ -458,23 +456,22 @@ def make_frame_to_burst_json(db_path: str, output_path: str, metadata: dict):
         df_frame_to_burst = pd.read_sql_query(
             """
             SELECT
-                frames.fid AS frame_id,
+                f.fid AS frame_id,
                 f.epsg,
                 MIN(xmin) AS xmin,
                 MIN(ymin) AS ymin,
                 MAX(xmax) AS xmax,
                 MAX(ymax) AS ymax,
                 GROUP_CONCAT(burst_id_jpl) AS burst_ids
-            FROM frames
-            JOIN frames_bursts fb ON fb.frame_fid = frames.fid
+            FROM frames f
+            JOIN frames_bursts fb ON fb.frame_fid = f.fid
             JOIN burst_id_map b ON fb.burst_ogc_fid = b.ogc_fid
             GROUP BY 1;
         """,
             con,
         )
     df_frame_to_burst.burst_ids = df_frame_to_burst.burst_ids.str.split(",")
-    d2 = df_frame_to_burst.set_index("frame_id").to_dict(orient="index")
-    data_dict = {k: v["burst_ids"] for k, v in d2.items()}
+    data_dict = df_frame_to_burst.set_index("frame_id").to_dict(orient="index")
     dict_out = {"data": data_dict, "metadata": metadata}
 
     _write_zipped_json(output_path, dict_out)
@@ -534,6 +531,12 @@ def create_metadata_table(db_path, metadata):
         df.to_sql("metadata", con, if_exists="replace", index=False)
 
 
+def read_zipped_json(filename):
+    with zipfile.ZipFile(filename) as zf:
+        bytes = zf.read(str(filename).replace(".zip", ""))
+        return json.loads(bytes.decode())
+
+
 def get_cli_args():
     parser = argparse.ArgumentParser(
         description="Generate frames for Sentinel-1 data",
@@ -586,7 +589,7 @@ def get_cli_args():
         "-o",
         "--outfile",
         help="Output file name (default is "
-        "'s1-frames-{target_frame}frames-{min_frame}min-{max_frame}max.gpkg'",
+        "'opera-s1-frames-{target_frame}frames-{min_frame}min-{max_frame}max.gpkg'",
     )
     parser.add_argument(
         "--land-buffer-deg",
@@ -607,9 +610,11 @@ def main():
     max_frame = args.max_frame
     if not args.outfile:
         if args.optimize_land:
-            basename = f"s1-frames-{target_frame}frames-{min_frame}min-{max_frame}max"
+            basename = (
+                f"opera-s1-frames-{target_frame}frames-{min_frame}min-{max_frame}max"
+            )
         else:
-            basename = f"s1-frames-simple-{target_frame}frames"
+            basename = f"opera-s1-frames-simple-{target_frame}frames"
         outfile = f"{basename}.gpkg"
     else:
         outfile = args.outfile
