@@ -20,6 +20,7 @@ from burst_db import __version__
 from . import frames
 from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
 from ._land_usgs import get_greenland_shape, get_land_df
+from ._opera_north_america import get_opera_na_shape
 
 
 def make_jpl_burst_id(df: pd.DataFrame):
@@ -109,7 +110,8 @@ def make_frame_table(outfile: str):
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
         con.execute(
-            "CREATE TABLE frames (fid INTEGER PRIMARY KEY, epsg INTEGER, is_land INTEGER)"
+            "CREATE TABLE frames (fid INTEGER PRIMARY KEY, epsg INTEGER, "
+            "is_land INTEGER, is_north_america INTEGER)"
         )
         # https://groups.google.com/g/spatialite-users/c/XcWvAk7vg0c
         # should add geom after the table is created
@@ -460,6 +462,7 @@ def make_frame_to_burst_json(db_path: str, output_path: str, metadata: dict):
                 f.fid AS frame_id,
                 f.epsg,
                 f.is_land,
+                f.is_north_america,
                 MIN(xmin) AS xmin,
                 MIN(ymin) AS ymin,
                 MAX(xmax) AS xmax,
@@ -474,6 +477,7 @@ def make_frame_to_burst_json(db_path: str, output_path: str, metadata: dict):
         )
     df_frame_to_burst.burst_ids = df_frame_to_burst.burst_ids.str.split(",")
     df_frame_to_burst.is_land = df_frame_to_burst.is_land.astype(bool)
+    df_frame_to_burst.is_north_america = df_frame_to_burst.is_north_america.astype(bool)
     data_dict = df_frame_to_burst.set_index("frame_id").to_dict(orient="index")
     dict_out = {"data": data_dict, "metadata": metadata}
 
@@ -541,7 +545,7 @@ def create_metadata_table(db_path, metadata):
 
 def read_zipped_json(filename):
     with zipfile.ZipFile(filename) as zf:
-        bytes = zf.read(str(filename).replace(".zip", ""))
+        bytes = zf.read(str(Path(filename).name).replace(".zip", ""))
         return json.loads(bytes.decode())
 
 
@@ -686,12 +690,15 @@ def main():
     epsgs = get_epsg_codes(df_frames)
     df_frames.loc[:, "epsg"] = epsgs
 
-    print("Final number of frames:", len(df_frames))
-    print("Saving frames...")
-    # weird geopandas thing?
-    if "geom" in df_frames.columns and df_frames._geometry_column_name == "geometry":
-        df_frames = df_frames.loc[:, ["epsg", "geometry"]]
+    # Mark the ones in north america in the OPERA region of interest
+    geom_north_america = get_opera_na_shape()
+    is_in_north_america = get_land_indicator(df_frames, geom_north_america)
+    df_frames.loc[:, "is_north_america"] = is_in_north_america
 
+    print("Final number of frames:", len(df_frames))
+    print("Number intersecting land:", is_in_land.sum())
+    print("Number in North America:", is_in_north_america.sum())
+    print("Saving frames...")
     df_frames.to_file(outfile, driver="GPKG", layer="frames")
 
     update_burst_epsg(outfile)
@@ -713,6 +720,9 @@ def main():
 
     # Get metadata for output dbs
     metadata = _get_metadata(args)
+    # Create the two JSON mappings: 
+    # from frame id -> [burst Ids]
+    # and burst id -> [frame Ids]
     make_burst_to_frame_json(
         df_minimal, output_path=out_burst_to_frame, metadata=metadata
     )

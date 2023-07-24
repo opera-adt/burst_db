@@ -43,12 +43,13 @@ python -m pip install .
 After running `pip install .` , the `opera-create-db` command will create the sqlite Frame Database, as well as JSON files which map the burst IDs to frame IDs, and frame IDs to burst IDs.
 
 The format of the frame-to-burst mapping is
-```json
+```python
 {
     "data" : {
         "1": {
             "epsg": 32631,
             "is_land": False,
+            "is_north_america": False,
             "xmin": 500160,
             "ymin": 78240,
             "xmax": 789960,
@@ -71,7 +72,7 @@ The format of the frame-to-burst mapping is
 where the keys of the the `data` dict are the frame IDs.
 
 The burst-to-frame mapping has the structure
-```json
+```python
 {
     "data" : {
         "t001_000001_iw1": {"frame_ids": [1]},
