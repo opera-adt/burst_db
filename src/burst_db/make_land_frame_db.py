@@ -412,7 +412,7 @@ WHERE burst_id_map.OGC_FID = bboxes.OGC_FID ;
         con.execute(sql)
 
 
-def make_minimal_db(db_path, df_frame_to_burst_id, output_path, out_burst_to_frame):
+def make_minimal_db(db_path, df_frame_to_burst_id, output_path):
     """Make a minimal database with only the following columns:
 
     burst_id_jpl, epsg, xmin, ymin, ymax, ymax, frame_ids
@@ -439,30 +439,44 @@ def make_minimal_db(db_path, df_frame_to_burst_id, output_path, out_burst_to_fra
         df, df_burst_to_frames, how="inner", left_on="OGC_FID", right_on="burst_ogc_fid"
     )
     df_out.drop(columns=("OGC_FID"), inplace=True)
+    return df_out
 
-    dict_out = df_out.set_index("burst_id_jpl").to_dict(orient="index")
+
+def make_burst_to_frame_json(df, output_path: str, metadata: dict):
+    dict_out = df.set_index("burst_id_jpl").to_dict(orient="index")
     # Format:
     # ('t001_000001_iw1', {'epsg': 32631, 'xmin': 531360, 'ymin': 78240,
     # 'xmax': 630690, 'ymax': 128280, 'frame_fid': [1]})
     # Convert to ('t001_000001_iw1', (32631, 531360, 78240, 630690, 128280, [1]))
-    dict_out = {k: tuple(v.values()) for k, v in dict_out.items()}
-    _write_zipped_json(out_burst_to_frame, dict_out)
+    data_dict = {k: tuple(v.values()) for k, v in dict_out.items()}
+    dict_out = {"data": data_dict, "metadata": metadata}
+    _write_zipped_json(output_path, dict_out)
 
 
-def make_frame_to_burst_json(db_path, output_path):
+def make_frame_to_burst_json(db_path: str, output_path: str, metadata: dict):
     with sqlite3.connect(db_path) as con:
         df_frame_to_burst = pd.read_sql_query(
             """
-            SELECT frames.fid AS frame_id, GROUP_CONCAT(burst_id_jpl) AS burst_ids 
-            FROM frames JOIN frames_bursts fb on fb.frame_fid = frames.fid 
-            JOIN burst_id_map b ON fb.burst_ogc_fid = b.ogc_fid 
+            SELECT
+                frames.fid AS frame_id,
+                f.epsg,
+                MIN(xmin) AS xmin,
+                MIN(ymin) AS ymin,
+                MAX(xmax) AS xmax,
+                MAX(ymax) AS ymax,
+                GROUP_CONCAT(burst_id_jpl) AS burst_ids
+            FROM frames
+            JOIN frames_bursts fb ON fb.frame_fid = frames.fid
+            JOIN burst_id_map b ON fb.burst_ogc_fid = b.ogc_fid
             GROUP BY 1;
         """,
             con,
         )
     df_frame_to_burst.burst_ids = df_frame_to_burst.burst_ids.str.split(",")
     d2 = df_frame_to_burst.set_index("frame_id").to_dict(orient="index")
-    dict_out = {k: v["burst_ids"] for k, v in d2.items()}
+    data_dict = {k: v["burst_ids"] for k, v in d2.items()}
+    dict_out = {"data": data_dict, "metadata": metadata}
+
     _write_zipped_json(output_path, dict_out)
 
 
@@ -502,22 +516,20 @@ def _get_burst_to_frame_list(df_frame_to_burst_id):
     )
 
 
-def create_metadata_table(db_path, args):
+def _get_metadata(args):
+    return {
+        "margin": args.margin,
+        "snap": args.snap,
+        "target_frame_size": args.target_frame,
+        "version": __version__,
+        "land_buffer_deg": args.land_buffer_deg,
+        "last_modified": datetime.datetime.now().isoformat(),
+    }
+
+
+def create_metadata_table(db_path, metadata):
     """Make the metadata table with the arguments used to create the database."""
-    df = pd.DataFrame(
-        [
-            {
-                "margin": args.margin,
-                "snap": args.snap,
-                "min_frame": args.min_frame,
-                "target_frame": args.target_frame,
-                "max_frame": args.max_frame,
-                "version": __version__,
-                "land_buffer_deg": args.land_buffer_deg,
-                "last_modified": datetime.datetime.now().isoformat(),
-            }
-        ]
-    )
+    df = pd.DataFrame([metadata])
     with sqlite3.connect(db_path) as con:
         df.to_sql("metadata", con, if_exists="replace", index=False)
 
@@ -676,24 +688,31 @@ def main():
     add_gpkg_spatial_ref_sys(outfile)
     save_utm_bounding_boxes(outfile, margin=args.margin, snap=args.snap)
 
-    # # Make the minimal version of the DB
+    # Make the minimal version of the DB
     ext = Path(outfile).suffix
     out_minimal = outfile.replace(ext, f"-bbox-only{ext}")
-    out_burst_to_frame = outfile.replace(ext, f"-burst-to-frame.json")
+    out_burst_to_frame = outfile.replace(ext, "-burst-to-frame.json")
     print(f"Creating a epsg/bbox only version: {out_minimal}")
-    make_minimal_db(
+    df_minimal = make_minimal_db(
         db_path=outfile,
         df_frame_to_burst_id=df_frame_to_burst_id,
         output_path=out_minimal,
-        out_burst_to_frame=out_burst_to_frame,
     )
 
-    out_frame_to_burst = outfile.replace(ext, f"-frame-to-burst.json")
-    make_frame_to_burst_json(db_path=outfile, output_path=out_frame_to_burst)
+    # Get metadata for output dbs
+    metadata = _get_metadata(args)
+    make_burst_to_frame_json(
+        df_minimal, output_path=out_burst_to_frame, metadata=metadata
+    )
+
+    out_frame_to_burst = outfile.replace(ext, "-frame-to-burst.json")
+    make_frame_to_burst_json(
+        db_path=outfile, output_path=out_frame_to_burst, metadata=metadata
+    )
 
     # Add metadata to each
-    create_metadata_table(outfile, args)
-    create_metadata_table(out_minimal, args)
+    create_metadata_table(outfile, metadata=metadata)
+    create_metadata_table(out_minimal, metadata=metadata)
 
     print(f"Total time: {time.time() - t0:.2f} seconds")
 
