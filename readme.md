@@ -16,7 +16,7 @@ cd burst_db
 2. Install dependencies:
 
 ```bash
-conda install -c conda-forge --file environment.yml
+conda install --name burst_db -c conda-forge --file environment.yml
 ```
 
 3. Install `burst_db` via pip:
