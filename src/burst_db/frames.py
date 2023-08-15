@@ -68,6 +68,7 @@ def create_frame_to_burst_mapping(
 
 
 def _process_slice(slice_info, target_frame, min_frame, max_frame):
+    """Solve the current batch of bursts to find frame slices."""
     start_idx, end_idx, is_land = slice_info
     n = end_idx - start_idx
     cur_slices = solve(
@@ -169,7 +170,7 @@ def _badness(i, j, target=TARGET_FRAME, max_frame=MAX_FRAME, min_frame=MIN_FRAME
 
 
 def create_frame_slices(is_land_indicator, min_frame=MIN_FRAME) -> list[FrameSlice]:
-    """Group adjacent frames that are too small."""
+    """Group adjacent frames that are too small into continuous land tracks."""
     indicator = is_land_indicator.copy()
     ii = 0
     # First iter: make sure all land sequences are at least min_frame long
@@ -220,6 +221,7 @@ def create_frame_slices(is_land_indicator, min_frame=MIN_FRAME) -> list[FrameSli
 def _make_simple_frame_slices(
     is_in_land, n_bursts_per_frame=9, overlap=1
 ) -> list[FrameSlice]:
+    """Group together adjacent `n_bursts_per_frame`, overlapping by `overlap`."""
     num_bursts = len(is_in_land)
     num_frames = int(np.ceil(num_bursts / (n_bursts_per_frame - overlap)))
     burst_start_idxs = [k * (n_bursts_per_frame - overlap) for k in range(num_frames)]
