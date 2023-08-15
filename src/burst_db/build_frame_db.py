@@ -720,7 +720,7 @@ def main():
 
     # Get metadata for output dbs
     metadata = _get_metadata(args)
-    # Create the two JSON mappings: 
+    # Create the two JSON mappings:
     # from frame id -> [burst Ids]
     # and burst id -> [frame Ids]
     make_burst_to_frame_json(
