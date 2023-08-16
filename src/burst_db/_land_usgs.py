@@ -1,6 +1,4 @@
-'''
-An internal module to download shape files for land are and Greenland
-'''
+"""An internal module to download shape files for land are and Greenland."""
 import fnmatch
 import zipfile
 from pathlib import Path
@@ -12,11 +10,14 @@ import unzip_http
 from shapely.geometry import MultiPolygon
 
 USGS_LAND_URL = "https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-shp-2.3.7.zip"  # noqa
-GREENLAND_URL = "https://stacks.stanford.edu/file/druid:sd368wz2435/data.zip"  # noqa  # noqa
+GREENLAND_URL = "https://stacks.stanford.edu/file/druid:sd368wz2435/data.zip"  # noqa
 
 
 def get_usgs_land(outpath=None):
-    f"""Get the USGS land data from {USGS_LAND_URL}."""
+    """Get the USGS land data from the following url:
+
+    https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-shp-2.3.7.zip
+    """
     outpath = Path(outpath) if outpath else Path.cwd()
     rzf = unzip_http.RemoteZipFile(USGS_LAND_URL)
     # Level 1: Continental land masses and ocean islands, except Antarctica.
@@ -46,7 +47,8 @@ def get_land_df(
     outname="usgs_land_{d}deg_buffered.geojson",
     driver="GeoJSON",
     zip=True,
-):
+) -> gpd.GeoDataFrame:
+    """Create a GeoDataFrame of the (buffered) USGS land polygons."""
     outname = outname.format(d=buffer_deg)
     if outname and Path(outname).exists():
         print(f"Loading {outname} from disk")
@@ -77,7 +79,10 @@ def get_land_df(
 
 
 def get_greenland_shape(outpath=None, buffer_deg=0.2) -> MultiPolygon:
-    f"""Get the Greenland data from {GREENLAND_URL}."""
+    """Get the Greenland data from the following URL:
+
+    https://stacks.stanford.edu/file/druid:sd368wz2435/data.zip
+    """
     outpath = Path(outpath) if outpath else Path.cwd()
     outname = outpath / f"greenland_{buffer_deg}deg_buffered.geojson"
     if outname.exists():
