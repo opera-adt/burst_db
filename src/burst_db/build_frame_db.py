@@ -23,7 +23,7 @@ from ._land_usgs import get_greenland_shape, get_land_df
 from ._opera_north_america import get_opera_na_shape
 
 # Threshold to use EPSG:3413, Sea Ice Polar North (https://epsg.io/3413)
-NORTH_THRESHOLD = 84
+NORTH_THRESHOLD = 75
 NORTH_EPSG = 3413
 # Threshold to use EPSG:3031, Antarctic Polar Stereographic (https://epsg.io/3031)
 SOUTH_THRESHOLD = -60
