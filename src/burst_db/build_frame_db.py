@@ -22,6 +22,11 @@ from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
 from ._land_usgs import get_greenland_shape, get_land_df
 from ._opera_north_america import get_opera_na_shape
 
+# Threshold to use EPSG:3413, Sea Ice Polar North (https://epsg.io/3413)
+LATITUDE_NORTH_THRESHOLD = 84
+# Threshold to use EPSG:3031, Antarctic Polar Stereographic (https://epsg.io/3031)
+LATITUDE_SOUTH_THRESHOLD = -60
+
 
 def make_jpl_burst_id(df: pd.DataFrame):
     """Make the JPL burst ID from the ESA burst ID."""
@@ -207,13 +212,15 @@ def get_epsg_codes(df: gpd.GeoDataFrame):
     ys_full_size = np.ones(len(epsgs)) * np.nan
     ys_full_size[~am_idxs] = ys
 
-    idxs = np.logical_and.reduce((~am_idxs, ys_full_size > 84))
+    idxs = np.logical_and.reduce((~am_idxs, ys_full_size > LATITUDE_NORTH_THRESHOLD))
     epsgs[idxs] = 3413
 
-    idxs = np.logical_and.reduce((~am_idxs, ys_full_size < -60))
+    idxs = np.logical_and.reduce((~am_idxs, ys_full_size < LATITUDE_SOUTH_THRESHOLD))
     epsgs[idxs] = 3031
 
-    utm_idxs = np.logical_and(ys < 84, ys > -60)
+    utm_idxs = np.logical_and(
+        ys < LATITUDE_NORTH_THRESHOLD, ys > LATITUDE_SOUTH_THRESHOLD
+    )
     north_idxs = ys[utm_idxs] > 0
 
     # North hemisphere
@@ -221,7 +228,9 @@ def get_epsg_codes(df: gpd.GeoDataFrame):
         utm.from_latlon(y, x)[2]
         for (y, x) in zip(ys[utm_idxs][north_idxs], xs[utm_idxs][north_idxs])
     ]
-    idxs = np.logical_and.reduce((~am_idxs, ys_full_size < 84, ys_full_size > 0))
+    idxs = np.logical_and.reduce(
+        (~am_idxs, ys_full_size < LATITUDE_NORTH_THRESHOLD, ys_full_size > 0)
+    )
     epsgs[idxs] = 32600 + np.array(zones_north)
 
     # South hemisphere
@@ -229,7 +238,9 @@ def get_epsg_codes(df: gpd.GeoDataFrame):
         utm.from_latlon(y, x)[2]
         for (y, x) in zip(ys[utm_idxs][~north_idxs], xs[utm_idxs][~north_idxs])
     ]
-    idxs = np.logical_and.reduce((~am_idxs, ys_full_size > -60, ys_full_size < 0))
+    idxs = np.logical_and.reduce(
+        (~am_idxs, ys_full_size > LATITUDE_SOUTH_THRESHOLD, ys_full_size < 0)
+    )
     epsgs[idxs] = 32700 + np.array(zones_south)
 
     # Set all Greenland frames to EPSG:3413
@@ -263,9 +274,9 @@ def antimeridian_epsg(mp):
     """
     y_c = mp.centroid.y
     # check north/south pole cases
-    if y_c >= 84.0:
+    if y_c >= LATITUDE_NORTH_THRESHOLD:
         return 3413
-    elif y_c <= -60.0:
+    elif y_c <= LATITUDE_SOUTH_THRESHOLD:
         return 3031
 
     # otherwise, do the weighted average of the shifted polygons to get the centroid
@@ -281,10 +292,11 @@ def antimeridian_epsg(mp):
             x_weighted += g.centroid.x * g.area
     x_c = x_weighted / A
 
+    # Northern hemisphere = 326XX, southern is 327XX
     base = 32600 if y_c > 0 else 32700
-    # longitude 179 gets 32660 north of the equator
-    # longitude -179 gets 32601
-    zone_addition = 1 if x_c < 180 else 60
+    # EPSG increases negative to positive (west to east)
+    # 32601 is at longitude -179 (which 181 after shifting +360)
+    zone_addition = 1 if x_c > 180 else 60
     return base + zone_addition
 
 
@@ -593,7 +605,7 @@ def get_cli_args():
     parser.add_argument(
         "-o",
         "--outfile",
-        default='opera-s1-disp.gpkg',
+        default="opera-s1-disp.gpkg",
         help="Output file name",
     )
     parser.add_argument(
