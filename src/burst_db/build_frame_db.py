@@ -102,13 +102,16 @@ def make_frame_to_burst_table(outfile: str, df_frame_to_burst_id: pd.DataFrame):
 
         df_frame_to_burst_id.to_sql("frames_bursts", con, if_exists="replace")
         con.execute(
-            "CREATE INDEX IF NOT EXISTS idx_frames_bursts_burst_ogc_fid ON frames_bursts (burst_ogc_fid)"
+            "CREATE INDEX IF NOT EXISTS idx_frames_bursts_burst_ogc_fid ON"
+            " frames_bursts (burst_ogc_fid)"
         )
         con.execute(
-            "CREATE INDEX IF NOT EXISTS idx_frames_bursts_frame_fid ON frames_bursts (frame_fid)"
+            "CREATE INDEX IF NOT EXISTS idx_frames_bursts_frame_fid ON frames_bursts"
+            " (frame_fid)"
         )
         con.execute(
-            "CREATE INDEX IF NOT EXISTS idx_burst_id_map_burst_id ON burst_id_map (burst_id)"
+            "CREATE INDEX IF NOT EXISTS idx_burst_id_map_burst_id ON burst_id_map"
+            " (burst_id)"
         )
 
 
@@ -124,7 +127,8 @@ def make_frame_table(outfile: str):
         # should add geom after the table is created
         # table_name , geometry_column_name , geometry_type , with_z , with_m , srs_id
         con.execute(
-            "SELECT gpkgAddGeometryColumn('frames', 'geom', 'MULTIPOLYGON', 2, 0, 4326);"
+            "SELECT gpkgAddGeometryColumn('frames', 'geom', 'MULTIPOLYGON', 2, 0,"
+            " 4326);"
         )
 
         # Aggregates burst geometries for each frame into one
@@ -308,7 +312,8 @@ def update_burst_epsg(outfile):
         _setup_spatialite_con(con)
         # add index
         con.execute(
-            "CREATE INDEX IF NOT EXISTS idx_burst_id_map_burst_id_jpl ON burst_id_map (burst_id_jpl)"
+            "CREATE INDEX IF NOT EXISTS idx_burst_id_map_burst_id_jpl ON burst_id_map"
+            " (burst_id_jpl)"
         )
         # Set the EPSG on every burst from the frames
         print("Updating burst EPSGs to match frames...")
@@ -438,7 +443,10 @@ def make_minimal_db(db_path, df_frame_to_burst_id, output_path):
     """
     with sqlite3.connect(db_path) as con:
         df = pd.read_sql_query(
-            "SELECT OGC_FID, burst_id_jpl, epsg, xmin, ymin, xmax, ymax FROM burst_id_map",
+            (
+                "SELECT OGC_FID, burst_id_jpl, epsg, xmin, ymin, xmax, ymax FROM"
+                " burst_id_map"
+            ),
             con,
         )
     # Make sure snapped coordinates as integers (~40% smaller than REAL)
@@ -455,7 +463,7 @@ def make_minimal_db(db_path, df_frame_to_burst_id, output_path):
     df_out = pd.merge(
         df, df_burst_to_frames, how="inner", left_on="OGC_FID", right_on="burst_ogc_fid"
     )
-    df_out.drop(columns=("OGC_FID"), inplace=True)
+    df_out.drop(columns="OGC_FID", inplace=True)
     return df_out
 
 
@@ -589,7 +597,10 @@ def get_cli_args():
     parser.add_argument(
         "--optimize-land",
         action="store_true",
-        help="Create frames which attempt to minimize the number of majority-water frames",
+        help=(
+            "Create frames which attempt to minimize the number of majority-water"
+            " frames"
+        ),
     )
     parser.add_argument(
         "--target-frame",
