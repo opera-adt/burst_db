@@ -19,7 +19,7 @@ from burst_db import __version__
 
 from . import frames
 from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
-from ._land_usgs import get_greenland_shape, get_land_df
+from ._land_usgs import GREENLAND_URL, USGS_LAND_URL, get_greenland_shape, get_land_df
 from ._opera_north_america import get_opera_na_shape
 
 # Threshold to use EPSG:3413, Sea Ice Polar North (https://epsg.io/3413)
@@ -246,7 +246,9 @@ def get_epsg_codes(df: gpd.GeoDataFrame):
     # Set all Greenland frames to EPSG:3413
     geom_greenland = get_greenland_shape()
     is_in_greenland = get_land_indicator(df, geom_greenland)
-    print(f"{is_in_greenland.sum()} frames are in Greenland. Setting to EPSG:{NORTH_EPSG}")
+    print(
+        f"{is_in_greenland.sum()} frames are in Greenland. Setting to EPSG:{NORTH_EPSG}"
+    )
     epsgs[is_in_greenland] = NORTH_EPSG
 
     return epsgs
@@ -536,6 +538,9 @@ def _get_metadata(args):
         "last_modified": datetime.datetime.now().isoformat(),
         "land_buffer_deg": args.land_buffer_deg,
         "land_optimized": args.optimize_land,
+        "usgs_land_shape_url": USGS_LAND_URL,
+        "greenland_shape_url": GREENLAND_URL,
+        "esa_burst_db_url": ESA_DB_URL,
     }
     if args.optimize_land:
         base["min_frame_size"] = args.min_frame
