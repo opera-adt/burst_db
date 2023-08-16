@@ -486,9 +486,9 @@ def make_frame_to_burst_json(db_path: str, output_path: str, metadata: dict):
 
 def _write_zipped_json(json_path, dict_out, level: int = 6):
     json_zip_path = str(json_path) + ".zip"
-    with zipfile.Zipfile(json_zip_path, "w",
-        compression=zipfile.ZIP_DEFLATED,
-        compresslevel=level) as zf:
+    with zipfile.Zipfile(
+        json_zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=level
+    ) as zf:
         zf.writestr(json_path, json.dumps(dict_out))
 
 
