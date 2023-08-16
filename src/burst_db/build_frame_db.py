@@ -374,7 +374,7 @@ def add_gpkg_spatial_ref_sys(outfile):
         con.execute(sql)
 
 
-def save_utm_bounding_boxes(outfile, margin=4000, snap=50.0):
+def save_utm_bounding_boxes(outfile, *, margin: float, snap: float):
     """Save the bounding boxes of each burst in UTM coordinates."""
     print("Saving UTM bounding boxes...")
     try:
@@ -610,29 +610,15 @@ def main():
     args = get_cli_args()
 
     t0 = time.time()
-    target_frame = args.target_frame
-    min_frame = args.min_frame
-    max_frame = args.max_frame
-    if not args.outfile:
-        if not args.optimize_land:
-            basename = "opera-s1-disp"
-        else:
-            basename = (
-                f"opera-s1-frames-{target_frame}frames-{min_frame}min-{max_frame}max"
-            )
-        outfile = f"{basename}.gpkg"
-    else:
-        outfile = args.outfile
 
-    esa_db_path = args.esa_db_path
     # Read ESA's Burst Data
-    if not Path(esa_db_path).exists():
-        print(f"Downloading {ESA_DB_URL} to {esa_db_path}...")
-        get_esa_burst_db(esa_db_path)
+    if not Path(args.esa_db_path).exists():
+        print(f"Downloading {ESA_DB_URL} to {args.esa_db_path}...")
+        get_esa_burst_db(args.esa_db_path)
 
     print("Loading burst data...")
     sql = "SELECT * FROM burst_id_map"
-    with sqlite3.connect(esa_db_path) as con:
+    with sqlite3.connect(args.esa_db_path) as con:
         df_burst = gpd.GeoDataFrame.from_postgis(
             sql, con, geom_col="GEOMETRY", crs="EPSG:4326"
         ).rename_geometry("geom")
@@ -644,6 +630,7 @@ def main():
     df_burst.loc[:, "epsg"] = 0
 
     # Start the outfile with the ESA database contents
+    outfile = args.outfile
     print("Saving initial version of `burst_id_map` table")
     df_burst.set_index("OGC_FID").to_file(
         outfile, driver="GPKG", layer="burst_id_map", index=False
@@ -657,7 +644,7 @@ def main():
     df_burst_triplet = make_burst_triplets(df_burst)
 
     # Get the land polygon to intersect
-    print("Indicating which bursts are near land...")
+    print("Indicating which burst triplets are near land...")
     df_land = get_land_df(args.land_buffer_deg)
     land_geom = df_land.geometry
 
