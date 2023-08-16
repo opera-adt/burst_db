@@ -19,7 +19,7 @@ FrameSlice = namedtuple("FrameSlice", ["start_idx", "end_idx", "is_land"])
 
 
 def create_frame_to_burst_mapping(
-    is_in_land: ArrayLike,
+    burst_is_in_land: ArrayLike,
     target_frame: int,
     min_frame: int,
     max_frame: int,
@@ -27,28 +27,13 @@ def create_frame_to_burst_mapping(
 ) -> pd.DataFrame:
     """Create the JOIN table between frames_number and burst_id."""
     if not optimize_land:
-        cumulative_slice_idxs = _make_simple_frame_slices(is_in_land)
+        cumulative_slice_idxs = make_simple_frame_slices(burst_is_in_land)
     else:
-        frame_slices = create_frame_slices(is_in_land, min_frame=min_frame)
-        # parallelize the solve function calls
-        with ProcessPoolExecutor() as executor:
-            cumulative_slice_idxs = list(
-                tqdm(
-                    executor.map(
-                        _process_slice,
-                        frame_slices,
-                        repeat(target_frame),
-                        repeat(min_frame),
-                        repeat(max_frame),
-                    ),
-                    desc="Solving frame sizes",
-                    total=len(frame_slices),
-                )
-            )
-
-        # Flatten the list of lists, since each result from executor.map is a list
-        cumulative_slice_idxs = sorted(
-            [item for sublist in cumulative_slice_idxs for item in sublist]
+        cumulative_slice_idxs = make_land_optimized_frame_slices(
+            burst_is_in_land,
+            target_frame=target_frame,
+            min_frame=min_frame,
+            max_frame=max_frame,
         )
 
     # Create the frame IDs mapping to burst_id
@@ -65,6 +50,54 @@ def create_frame_to_burst_mapping(
         frame_ogc_fid_tuples, columns=["frame_fid", "burst_ogc_fid", "is_land"]
     )
     return df_frame_to_burst_id
+
+
+def make_simple_frame_slices(
+    burst_is_in_land: ArrayLike, n_bursts_per_frame: int = 9, overlap: int = 1
+) -> list[FrameSlice]:
+    """Group together adjacent `n_bursts_per_frame`, overlapping by `overlap`."""
+    num_bursts = len(burst_is_in_land)
+    num_frames = int(np.ceil(num_bursts / (n_bursts_per_frame - overlap)))
+    burst_start_idxs = [k * (n_bursts_per_frame - overlap) for k in range(num_frames)]
+
+    frame_slices: list[FrameSlice] = []
+    # for is_land, cur_indicators in groupby(indicator):
+    for start in burst_start_idxs:
+        end = start + n_bursts_per_frame
+        frame_slices.append(FrameSlice(start, end, any(burst_is_in_land[start:end])))
+
+    return frame_slices
+
+
+def make_land_optimized_frame_slices(
+    burst_is_in_land: ArrayLike, *, target_frame: int, min_frame: int, max_frame: int
+):
+    """Create FrameSlices which optimize the area on land.
+
+    Uses the boolean array `burst_is_in_land` to find slices corresponding
+    to frames with size >= `min_frame` , <= `max_frame`, and nominally `target_frame`.
+    """
+    frame_slices = create_frame_slices(burst_is_in_land, min_frame=min_frame)
+    # parallelize the solve function calls
+    with ProcessPoolExecutor() as executor:
+        cumulative_slice_idxs = list(
+            tqdm(
+                executor.map(
+                    _process_slice,
+                    frame_slices,
+                    repeat(target_frame),
+                    repeat(min_frame),
+                    repeat(max_frame),
+                ),
+                desc="Solving frame sizes",
+                total=len(frame_slices),
+            )
+        )
+    # Flatten the list of lists, since each result from executor.map is a list
+    cumulative_slice_idxs = sorted(
+        [item for sublist in cumulative_slice_idxs for item in sublist]
+    )
+    return cumulative_slice_idxs
 
 
 def _process_slice(slice_info, target_frame, min_frame, max_frame):
@@ -214,22 +247,5 @@ def create_frame_slices(is_land_indicator, min_frame=MIN_FRAME) -> list[FrameSli
     print("Number of occurrences with consecutive water bursts:")
     print(sorted(consecutive_water_frames.items())[:5], end=",... ")
     print(sorted(consecutive_water_frames.items())[-5:])
-
-    return frame_slices
-
-
-def _make_simple_frame_slices(
-    is_in_land, n_bursts_per_frame=9, overlap=1
-) -> list[FrameSlice]:
-    """Group together adjacent `n_bursts_per_frame`, overlapping by `overlap`."""
-    num_bursts = len(is_in_land)
-    num_frames = int(np.ceil(num_bursts / (n_bursts_per_frame - overlap)))
-    burst_start_idxs = [k * (n_bursts_per_frame - overlap) for k in range(num_frames)]
-
-    frame_slices: list[FrameSlice] = []
-    # for is_land, cur_indicators in groupby(indicator):
-    for start in burst_start_idxs:
-        end = start + n_bursts_per_frame
-        frame_slices.append(FrameSlice(start, end, any(is_in_land[start:end])))
 
     return frame_slices
