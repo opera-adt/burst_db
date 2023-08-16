@@ -46,7 +46,7 @@ def get_land_df(
     buffer_deg=0.2,
     outname="usgs_land_{d}deg_buffered.geojson",
     driver="GeoJSON",
-    zip=True,
+    do_zip=True,
 ) -> gpd.GeoDataFrame:
     """Create a GeoDataFrame of the (buffered) USGS land polygons."""
     outname = outname.format(d=buffer_deg)
@@ -64,7 +64,7 @@ def get_land_df(
     df_land = df_land.dissolve()
 
     df_land.to_file(outname, driver=driver)
-    if zip and outname.endswith(".geojson"):
+    if do_zip and outname.endswith(".geojson"):
         outname_zipped = Path(str(outname) + ".zip")
         # zip and remove the original
         with zipfile.ZipFile(
