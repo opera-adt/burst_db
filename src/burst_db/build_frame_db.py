@@ -593,7 +593,8 @@ def get_cli_args():
     parser.add_argument(
         "-o",
         "--outfile",
-        help="Output file name (default is 'opera-s1-disp.gpkg'",
+        default='opera-s1-disp.gpkg',
+        help="Output file name",
     )
     parser.add_argument(
         "--land-buffer-deg",
