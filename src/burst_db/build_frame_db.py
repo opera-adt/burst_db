@@ -23,9 +23,11 @@ from ._land_usgs import get_greenland_shape, get_land_df
 from ._opera_north_america import get_opera_na_shape
 
 # Threshold to use EPSG:3413, Sea Ice Polar North (https://epsg.io/3413)
-LATITUDE_NORTH_THRESHOLD = 84
+NORTH_THRESHOLD = 84
+NORTH_EPSG = 3413
 # Threshold to use EPSG:3031, Antarctic Polar Stereographic (https://epsg.io/3031)
-LATITUDE_SOUTH_THRESHOLD = -60
+SOUTH_THRESHOLD = -60
+SOUTH_EPSG = 3031
 
 
 def make_jpl_burst_id(df: pd.DataFrame):
@@ -212,15 +214,13 @@ def get_epsg_codes(df: gpd.GeoDataFrame):
     ys_full_size = np.ones(len(epsgs)) * np.nan
     ys_full_size[~am_idxs] = ys
 
-    idxs = np.logical_and.reduce((~am_idxs, ys_full_size > LATITUDE_NORTH_THRESHOLD))
-    epsgs[idxs] = 3413
+    idxs = np.logical_and.reduce((~am_idxs, ys_full_size > NORTH_THRESHOLD))
+    epsgs[idxs] = NORTH_EPSG
 
-    idxs = np.logical_and.reduce((~am_idxs, ys_full_size < LATITUDE_SOUTH_THRESHOLD))
-    epsgs[idxs] = 3031
+    idxs = np.logical_and.reduce((~am_idxs, ys_full_size < SOUTH_THRESHOLD))
+    epsgs[idxs] = SOUTH_EPSG
 
-    utm_idxs = np.logical_and(
-        ys < LATITUDE_NORTH_THRESHOLD, ys > LATITUDE_SOUTH_THRESHOLD
-    )
+    utm_idxs = np.logical_and(ys < NORTH_THRESHOLD, ys > SOUTH_THRESHOLD)
     north_idxs = ys[utm_idxs] > 0
 
     # North hemisphere
@@ -229,7 +229,7 @@ def get_epsg_codes(df: gpd.GeoDataFrame):
         for (y, x) in zip(ys[utm_idxs][north_idxs], xs[utm_idxs][north_idxs])
     ]
     idxs = np.logical_and.reduce(
-        (~am_idxs, ys_full_size < LATITUDE_NORTH_THRESHOLD, ys_full_size > 0)
+        (~am_idxs, ys_full_size < NORTH_THRESHOLD, ys_full_size > 0)
     )
     epsgs[idxs] = 32600 + np.array(zones_north)
 
@@ -239,15 +239,15 @@ def get_epsg_codes(df: gpd.GeoDataFrame):
         for (y, x) in zip(ys[utm_idxs][~north_idxs], xs[utm_idxs][~north_idxs])
     ]
     idxs = np.logical_and.reduce(
-        (~am_idxs, ys_full_size > LATITUDE_SOUTH_THRESHOLD, ys_full_size < 0)
+        (~am_idxs, ys_full_size > SOUTH_THRESHOLD, ys_full_size < 0)
     )
     epsgs[idxs] = 32700 + np.array(zones_south)
 
     # Set all Greenland frames to EPSG:3413
     geom_greenland = get_greenland_shape()
     is_in_greenland = get_land_indicator(df, geom_greenland)
-    print(f"{is_in_greenland.sum()} frames are in Greenland. Setting to EPSG:3413")
-    epsgs[is_in_greenland] = 3413
+    print(f"{is_in_greenland.sum()} frames are in Greenland. Setting to EPSG:{NORTH_EPSG}")
+    epsgs[is_in_greenland] = NORTH_EPSG
 
     return epsgs
 
@@ -274,10 +274,10 @@ def antimeridian_epsg(mp):
     """
     y_c = mp.centroid.y
     # check north/south pole cases
-    if y_c >= LATITUDE_NORTH_THRESHOLD:
-        return 3413
-    elif y_c <= LATITUDE_SOUTH_THRESHOLD:
-        return 3031
+    if y_c >= NORTH_THRESHOLD:
+        return NORTH_EPSG
+    elif y_c <= SOUTH_THRESHOLD:
+        return SOUTH_EPSG
 
     # otherwise, do the weighted average of the shifted polygons to get the centroid
     A = 0
@@ -329,7 +329,9 @@ def update_burst_epsg(outfile):
 
 def add_gpkg_spatial_ref_sys(outfile):
     """Add all EPSG codes to the gpkg_spatial_ref_sys table."""
-    epsgs = [3031, 3413, 4326] + list(range(32601, 32661)) + list(range(32701, 32761))
+    north_hemi_utm = list(range(32601, 32661))
+    south_hemi_utm = list(range(32701, 32761))
+    epsgs = [SOUTH_EPSG, NORTH_EPSG, 4326] + north_hemi_utm + south_hemi_utm
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
         sql = "SELECT gpkgInsertEpsgSRID({epsg});"
