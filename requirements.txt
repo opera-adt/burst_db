@@ -1,4 +1,0 @@
-python>=3.9     # sentinel1-reader requirement
-numpy           # sentinel1-reader requirement
-gdal>=3
-sqlite
