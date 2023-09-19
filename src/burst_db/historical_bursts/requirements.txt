@@ -1,0 +1,8 @@
+geopandas
+numpy
+pandas
+pip
+s3fs
+shapely
+tqdm
+utm
