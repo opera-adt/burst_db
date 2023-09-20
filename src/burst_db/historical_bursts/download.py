@@ -2,24 +2,19 @@
 from __future__ import annotations
 
 import argparse
-import datetime
-from dataclasses import dataclass, field
+import boto3
+import os
+import sys
+import zipfile
 
-# from concurrent.futures import ProcessPoolExecutor
-import warnings
 from pathlib import Path
+from itertools import chain
+import shutil
 
-import asf_search as asf
+from asfsmd import make_patterns, download_annotations
 import backoff
-import geopandas as gpd
-import pandas as pd
-import requests
-import s1reader
-from joblib import Parallel, delayed
-from shapely.ops import unary_union
-from shapely.geometry import shape
-from tqdm.auto import tqdm
 from tqdm.contrib.concurrent import thread_map
+from tqdm.auto import tqdm
 
 import logging
 from rich.logging import RichHandler
@@ -32,241 +27,27 @@ logger.setLevel(logging.INFO)
 logging.getLogger("asfsmd").setLevel(logging.WARNING)
 
 
-def get_burst_rows(
-    safe_file: str | Path, out_dir: str | Path, orbit_dir="/home/staniewi/dev/orbits/"
-):
-    try:
-        outfile = (Path(out_dir) / Path(safe_file).stem).with_suffix(".csv")
-        if outfile.exists():
-            return
-        orbit_file = s1reader.get_orbit_file_from_dir(safe_file, orbit_dir=orbit_dir)
-        all_rows = []
-        for iw in [1, 2, 3]:
-            bursts = s1reader.load_bursts(
-                safe_file, orbit_file, swath_num=iw, flag_apply_eap=False
-            )
-            for b in bursts:
-                all_rows.append(_to_row(b, safe_file))
-
-        pd.DataFrame(all_rows).to_csv(outfile, header=False, mode="w", index=False)
-    except Exception as e:
-        print(f"Failure on {safe_file}: {e}")
-        outfile = (Path(out_dir) / f"failure_{Path(safe_file).stem}").touch()
-
-
-def _to_row(burst, safe_file):
-    burst_id = burst.burst_id
-    dt = burst.sensing_start.isoformat()
-    # Get an approximate border, fewer points
-    border = unary_union(burst.border).simplify(1 / 3600).wkt
-    return burst_id, dt, border, Path(safe_file).stem
-
-
-def make_all_safe_metadata(
-    *,
-    out_dir: str | Path,
-    dir_with_safes: str | Path | None,
-    safe_list: list[str | Path] | None = None,
-    orbit_dir="/home/staniewi/dev/orbits/",
-    max_jobs=20,
-):
-    if safe_list is None:
-        safe_list = sorted(Path(dir_with_safes).glob("*.SAFE"))
-        print(f"Found {len(safe_list)} SAFE dirs in {dir_with_safes}")
-
-    print(f"Writing CSVs to {out_dir}")
-
-    warnings.filterwarnings("ignore", category=UserWarning)  # s1reader is chatty
-    Parallel(n_jobs=max_jobs)(
-        delayed(get_burst_rows)(f, out_dir=out_dir, orbit_dir=orbit_dir)
-        for f in safe_list
-    )
-
-
-def add_to_file(results: asf.ASFProduct, out: Path):
-    rdf = gpd.GeoDataFrame.from_features(results.geojson())
-    mode = "a" if out.exists() else "w"
-    rdf.to_file(out, mode=mode)
-
-
-def download_iso_metadata(
-    wkt_file: str,
-    out_dir: str,
-    start_date: str,
-    end_date: str,
-    **kwargs,
-):
-    biweekly_dates = pd.date_range(start=start_date, end=end_date, freq="2W").strftime(
-        "%Y-%m-%d"
-    )
-
-    for start, end in tqdm(list(zip(biweekly_dates[:-1], biweekly_dates[1:]))):
-        tqdm.write(f"Downloading {start} to {end}")
-        try:
-            download_with_retry(
-                out_dir=out_dir,
-                wkt_file=wkt_file,
-                start=start,
-                end=end,
-                processingLevel="METADATA_SLC",
-                maxResults=2000,
-                platform="S1",
-                beamMode="IW",
-            )
-        except Exception as e:
-            tqdm.write(f"Error downloading data from {start} to {end}: {e}")
-
-
-@backoff.on_exception(backoff.expo, Exception, max_tries=3)
-def download_with_retry(
-    out_dir: str,
-    wkt_file: str,
-    start: str,
-    end: str,
-    processingLevel: str,
-    maxResults: int,
-    platform: str,
-    beamMode: str,
-) -> None:
-    from apertools import asfdownload
-
-    asfdownload.download_data(
-        out_dir=out_dir,
-        wkt_file=wkt_file,
-        start=start,
-        end=end,
-        processingLevel=processingLevel,
-        maxResults=maxResults,
-        platform=platform,
-        beamMode=beamMode,
-    )
-
-
-@dataclass
-class StacSearch:
-    start_date: datetime.date = datetime.date(2014, 10, 3)
-    end_date: datetime.date = field(default_factory=datetime.date.today)
-    max_workers: int = 10
-    output_dir: Path = Path(".")
-
-    @backoff.on_exception(backoff.expo, Exception, max_tries=3)
-    @staticmethod
-    def get_safes_by_date(
-        date: datetime.date, missions=["A", "B"], verbose=False
-    ) -> list[str]:
-        """Get the list of (VV, IW) SAFEs acquired on one date."""
-        # sub catalog per date
-        date_list_url = "https://cmr.earthdata.nasa.gov/stac/ASF/collections/SENTINEL-1{sat}_SLC.v1/{date_str}"
-
-        safe_names = []
-        for sat in missions:
-            resp = requests.get(
-                date_list_url.format(sat=sat, date_str=date.strftime("%Y/%m/%d"))
-            )
-            try:
-                resp.raise_for_status()
-            except requests.HTTPError:
-                if verbose:
-                    print(f"Failed for {date}. Skipping.")
-                continue
-
-            for item in resp.json()["links"]:
-                if not item["rel"] == "item":
-                    # e.g. 'self', 'root', 'parent'
-                    continue
-                # Strip the -SLC, which we'll add in later.
-                # We want the name to match the normal file names
-                s = item["title"].replace("-SLC", "")
-                # Check that the beam mode is IW (skip EW, WV, S3)
-                if s[4:6] != "IW":
-                    continue
-                # Only save VV (so SDV or SSV)
-                if s[15] != "V":
-                    continue
-                safe_names.append(s)
-
-        return safe_names
-
-    @backoff.on_exception(backoff.expo, Exception, max_tries=3)
-    @staticmethod
-    def get_safe_metadata(safe_name: str) -> tuple[str, str]:
-        """Get the geojson WKT and concept ID for one SAFE granule."""
-        item_url = "https://cmr.earthdata.nasa.gov/stac/ASF/collections/SENTINEL-1{sat}_SLC.v1/items/{safe_name}-SLC"
-        # example:
-        # https://cmr.earthdata.nasa.gov/stac/ASF/collections/SENTINEL-1A_SLC.v1/items/S1A_IW_SLC__1SDV_20150302T000329_20150302T000356_004845_006086_51B0-SLC
-        sat = "A" if safe_name.startswith("S1A") else "B"
-        resp = requests.get(item_url.format(safe_name=safe_name, sat=sat))
-        resp.raise_for_status()
-        js = resp.json()
-        # Get the polygon
-        polygon = shape(js["geometry"])
-
-        # Get the "Concept" url which has the S3 bucked
-        # example: "https://cmr.earthdata.nasa.gov/search/concepts/G1345380785-ASF.json"
-        concept_url = [
-            link["href"] for link in js["links"] if link["href"].endswith("-ASF.json")
-        ][0]
-        concept_id = concept_url.split("/")[-1].replace(".json", "")
-
-        return polygon.wkt, concept_id
-
-    def get_all_safe_names(self, overwrite: bool = False, missions=["A", "B"]):
-        """Grab the list of SAFE names for each date in parallel."""
-
-        def _save_save_list(date):
-            output_name = self.output_dir / f"safes-{date.strftime('%Y-%m-%d')}.txt"
-            if output_name.exists() and not overwrite:
-                print(f"{output_name} exists, skipping")
-            safe_list = StacSearch.get_safes_by_date(date, missions=missions)
-            with open(output_name, "a") as f:
-                f.write("\n")
-                f.write("\n".join(safe_list))
-                f.write("\n")
-
-        dates = pd.date_range(self.start_date, self.end_date, freq="1D").to_pydatetime()
-        thread_map(_save_save_list, dates, max_workers=self.max_workers)
-
-    def get_all_safe_metadata(self, overwrite: bool = False):
-        """After downloading the safe names, query for each SAFE metadata."""
-
-        safe_lists = sorted(self.output_dir.glob("safes-*.txt"))
-        print(f"Found {len(safe_lists)} files in {self.output_dir.resolve()}")
-        line_counts = {f: _line_count(f) for f in safe_lists}
-        print(f"Total number of SAFES: {sum(line_counts.values())}")
-        # Divide the outputs into months
-        # ...
-
-
-def _line_count(filename):
-    """Fast line count for a text file in python."""
-
-    def _make_gen(reader):
-        b = reader(1024 * 1024)
-        while b:
-            yield b
-            b = reader(1024 * 1024)
-
-    with open(filename, "rb") as f:
-        f_gen = _make_gen(f.raw.read)
-        return sum(buf.count(b"\n") for buf in f_gen)
-
-
 def download_safe_metadata(
-    product_name: str,
+    product_names: list[str],
     pol: str = "vv",
     outdir: str | Path = Path("."),
     skip_if_exists: bool = True,
 ):
-    out_product = (Path(outdir) / product_name).with_suffix(".SAFE")
-    if skip_if_exists and out_product.exists():
-        logger.info(f"{product_name} exists. Skipping.")
-        return
+    # out_product = (Path(outdir) / product_name).with_suffix(".SAFE")
+    out_products = [Path(outdir) / p for p in product_names]
+    # keep only the ones that don't exist
+    if skip_if_exists:
+        remaining_products = [
+            p for p, out in zip(product_names, out_products) if not out.exists()
+        ]
+    else:
+        remaining_products = product_names
 
-    logger.info(f"Downloading {product_name}")
+    logger.info(f"Downloading {len(remaining_products)} products")
     try:
-        _download_safe_metadata(product_name, pol=pol, outdir=Path(outdir))
+        _download_safe_metadata(remaining_products, pol=pol, outdir=Path(outdir))
     except Exception:
-        logger.error(f"Error downloading data from {product_name}", exc_info=True)
+        logger.error(f"Error downloading data from {remaining_products}", exc_info=True)
 
 
 @backoff.on_exception(backoff.expo, Exception, max_tries=3)
@@ -278,15 +59,48 @@ def _download_safe_metadata(
     """Use `asfsmd` to get the SAFE metadata for a product."""
 
     patterns = make_patterns(pol=pol)
-    download_annotations([product_name], patterns=patterns, outdir=outdir)
+    download_annotations(product_name, patterns=patterns, outdir=outdir)
 
 
-def _get_product_list(search_dir: str):
-    iso_xml_files = list(Path(search_dir).glob("*.iso.xml"))
-    logger.info(f"Found {len(iso_xml_files)} iso XML files.")
+def zip_and_upload(
+    safe_dirs: list[Path], bucket_name: str, folder_name: str, remove_local: bool = True
+):
+    """
+    Zips a list of safe_dirs and uploads the resulting zip file to S3.
 
-    # remove all suffixes, only product name left
-    return [p.name.split(".")[0] for p in iso_xml_files]
+    Parameters
+    ----------
+    safe_dirs : list[Path]
+        list of SAFE directory paths to be zipped.
+    bucket_name : str
+        Name of the S3 bucket to upload to.
+    folder_name : str
+        S3 folder to upload the zip file to.
+    remove_local : bool
+        Delete the local zip file and safe folder after upload.
+
+    Returns
+    -------
+    None
+    """
+
+    # Zip the safe_dirs
+    # Create an S3 client
+    s3 = boto3.client("s3")
+    logger.info(f"Uploading {len(safe_dirs)} safe_dirs to S3")
+    for safe_dir in safe_dirs:
+        zip_file = Path(shutil.make_archive(str(safe_dir), "zip", str(safe_dir)))
+
+        # Upload the zip safe_dir to S3
+        s3.upload_file(
+            Filename=zip_file, Bucket=bucket_name, Key=f"{folder_name}/{zip_file.name}"
+        )
+
+        # Optionally: remove the local zip safe_dir after upload
+        if remove_local:
+            logger.debug(f"Removing {safe_dir}")
+            shutil.rmtree(safe_dir)
+            zip_file.unlink()
 
 
 def _get_product_list_cmr(search_dir: str):
@@ -297,44 +111,110 @@ def _get_product_list_cmr(search_dir: str):
     )
 
 
-def main() -> None:
-    """Download Sentinel-1 metadata from a WKT file."""
 
+def _get_parser():
     parser = argparse.ArgumentParser(
-        description="Download S1 metadata over a region of interest.",
+        description="Download S1 metadata from a list of SAFE granule names.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--wkt-file", help="Input WKT file (for ISO search).")
     parser.add_argument(
-        "--iso",
-        action="store_true",
-        help="Download the .iso.xml metadata. Otherwise, gets the ASF search results as geojson",
+        "--out-dir", default="scratch", type=Path, help="Temporary output directory."
     )
-    parser.add_argument("--out-dir", default=".", help="Output directory.")
+    parser.add_argument("--bucket", help="S3 bucket name to upload results.")
     parser.add_argument(
-        "--outfile",
-        default="results.gpkg",
-        help="For GeoJson results, name of GPKG file to store results into.",
+        "--folder", help="S3 folder name within bucket to upload results."
     )
     parser.add_argument(
-        "--start-date", default="2014-09-01", help="Start date in YYYY-mm-dd format."
+        "--safe-list", help="Text file with list of SAFE granule names.", type=Path
     )
     parser.add_argument(
-        "--end-date",
-        default=str(pd.Timestamp.today().date()),
-        help="End date in YYYY-mm-dd format.",
+        "--batch-size",
+        default=100,
+        type=int,
+        help="Number of SAFE granules to download at once before uploading.",
     )
+    parser.add_argument(
+        "--start-idx",
+        default=0,
+        type=int,
+        help="Index of the first batch to download.",
+    )
+    parser.add_argument(
+        "--end-idx",
+        type=int,
+        help="Index of the last batch to download.",
+    )
+    
+    parser.add_argument(
+        "--max-workers",
+        default=3,
+        type=int,
+        help=(
+            "Number of workers to use for downloading SAFE metadata. "
+            "Each worker will get on of the batches of SAFE granules."
+        ),
+    )
+    return parser
 
+def main() -> None:
+    """Download Sentinel-1 metadata from a WKT file."""
+    parser = _get_parser()
     args = parser.parse_args()
     arg_dict = vars(args)
 
-    if args.iso:
-        if args.wkt_file is None:
-            raise ValueError("--wkt-file required for --iso")
-        download_iso_metadata(**arg_dict)
+    # Create the output directory
+    out_dir = arg_dict["out_dir"]
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Get the list of SAFE granule names
+    if arg_dict["safe_list"]:
+        product_names = arg_dict["safe_list"].read_text().splitlines()
     else:
-        download_geojson_metadata(**arg_dict)
+        product_names = _get_product_list_cmr(out_dir)
+
+    # Divide the list into batches
+    batch_size = arg_dict["batch_size"]
+    batches = [
+        product_names[i : i + batch_size]
+        for i in range(0, len(product_names), batch_size)
+    ]
+    logger.info(f"Divided {len(product_names)} products into {len(batches)} batches.")
+
+    # if arg_dict["use_s3"]:
+    # Set the ASFSMD_CLIENT environment variable to use S3
+    os.environ["ASFSMD_CLIENT"] = "s3fs"
+
+    def _download_and_save_s3(batch_idx: int):
+        batch = batches[batch_idx]
+        cur_out_dir = out_dir / f"batch_{batch_idx}"
+        cur_out_dir.mkdir(exist_ok=True)
+        download_safe_metadata(batch, outdir=cur_out_dir)
+        cur_files = list(cur_out_dir.glob("*.SAFE"))
+        # Upload the files to S3
+        zip_and_upload(cur_files, arg_dict["bucket"], arg_dict["folder"])
+
+    start_idx = args.start_idx
+    end_idx = len(batches) if args.end_idx is None else args.end_idx
+
+    # Download the SAFE metadata
+    thread_map(
+        _download_and_save_s3,
+        range(start_idx, end_idx),
+        desc="Downloading SAFE metadata",
+        total=end_idx - start_idx,
+        max_workers=arg_dict["max_workers"],
+    )
+    # )
+    # for batch_idx in range(len(batches)):
+    #     _download_and_save_s3(batch_idx)
 
 
 if __name__ == "__main__":
     main()
+
+# screen
+# micromamba activate -n base
+# total_lines=$(wc -l < remaining_safes.txt)
+# lines_per_file=$((total_lines / 5))
+# split -l $lines_per_file remaining_safes.txt -d remaining_safes_part_
+# ASFSMD_CLIENT=s3fs python download.py --batch 100 --max-work 20 --bucket burst-database-scott --folder safe_folders_zipped2 --safe-list ./remaining_safes_part_04
