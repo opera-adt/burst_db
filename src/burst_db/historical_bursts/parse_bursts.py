@@ -687,17 +687,7 @@ def bursts_from_safe_dir(safe_path: str, orbit_path: str) -> list[S1Burst]:
     if path.suffix == ".zip":
         unzip_safe(safe_path, path.parent)
         path = path.parent / path.stem
-        # with zipfile.ZipFile(path, "r") as z_file:
-        #     z_file_list = z_file.namelist()
 
-        #     # find annotation file - subswath of interest
-        #     annotation_files = [f for f in z_file_list if _is_zip_annotation(f)]
-
-        #     for f_annotation in annotation_files:
-        #         bursts.extend(
-        #             _bursts_from_xml(f_annotation, orbit_path, open_method=z_file.open)
-        #         )
-    # elif path.is_dir():
     annotation_files = (path / "annotation").glob("s1*-iw*-slc-*")
     if not annotation_files:
         raise ValueError(f"No annotation files found in {path}")
@@ -770,7 +760,7 @@ def pull_safes_for_date(
         # sat=satellite, sd=single_or_double, datestr=date.strftime("%Y%m%d")
         sat=satellite,
         sd=single_or_double,
-        datestr=date.strftime("%Y%m%dT01"),
+        datestr=date.strftime("%Y%m%d"),
     )
     prefix = f"{in_folder}/{search_term}"
     full_s3_path = f"s3://{bucket}/{prefix}"
