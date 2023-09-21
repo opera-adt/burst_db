@@ -695,7 +695,7 @@ def bursts_from_safe_dir(safe_path: str, orbit_path: str) -> list[S1Burst]:
     for f_annotation in annotation_files:
         bursts.extend(_bursts_from_xml(str(f_annotation), orbit_path))
     if not bursts:
-        breakpoint()
+        logger.error(f"No bursts found in {path}")
 
     # else:
     #     raise ValueError(f"Unknown file type, not a .zip or dir: {safe_path}")
@@ -718,10 +718,9 @@ def get_burst_rows(
 
         # pd.DataFrame(all_rows).to_csv(outfile, header=False, mode="w", index=False)
         _to_csv(all_rows, outfile)
-    except Exception as e:
-        logger.warning(f"Failure on {safe_file}: {e}")
+    except Exception:
+        logger.error(f"Failure on {safe_file}", exc_info=True)
         outfile = (Path(out_dir) / f"failure_{Path(safe_file).stem}").touch()
-        raise
     return outfile
 
 
