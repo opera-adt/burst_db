@@ -891,6 +891,12 @@ def main() -> None:
         help="Single or dual polarization to download.",
     )
 
+    parser.add_argument(
+        "--no-clean",
+        action="store_true",
+        help="Don't clean up SAFE files after processing.",
+    )
+
     args = parser.parse_args()
 
     # Create the output directory
@@ -952,7 +958,8 @@ def main() -> None:
             # all_rows.extend(pd.read_csv(csv, header=None).values.tolist())
             rows = csv.read_text().splitlines()
             all_rows.extend([row.split(",") for row in rows])
-            # csv.unlink()
+            if not args.no_clean:
+                csv.unlink()
 
         date_output = out_dir / f"{date.strftime('%Y%m%d')}.csv"
         _to_csv(all_rows, date_output)
@@ -965,7 +972,15 @@ def main() -> None:
             args.bucket,
             f"{args.out_folder}/{date_output.name}",
         )
-        # date_output.unlink()
+        if not args.no_clean:
+            date_output.unlink()
+        # Clean up the SAFE files
+        if not args.no_clean:
+            for file in out_dir.glob("*.SAFE*"):
+                if file.is_dir():
+                    shutil.rmtree(file)
+                else:
+                    file.unlink()
 
 
 if __name__ == "__main__":
