@@ -368,79 +368,6 @@ def get_osv_list_from_orbit(orbit_file: str):
     return orbit_state_vector_list
 
 
-
-def _sort_list_of_osv(list_of_osvs):
-    """
-    Sort the orbit state vectors (OSV) with respect to the UTC time
-
-    Parameters
-    ----------
-    list_of_osvs: ET.ElementTree
-        Orbit state vectors (OSVs) as XML ElementTree (ET) objects
-
-    Returns
-    -------
-    list_of_osvs: ET.ElementTree
-        Sorted orbit state vectors (OSVs) with respect to UTC time
-    """
-    utc_osv_list = [_get_utc_time_from_osv(osv) for osv in list_of_osvs]
-
-    sorted_index_list = [
-        index for index, _ in sorted(enumerate(utc_osv_list), key=lambda x: x[1])
-    ]
-
-    list_of_osvs_copy = list_of_osvs.__copy__()
-
-    for i_osv, _ in enumerate(list_of_osvs_copy):
-        index_to_replace = sorted_index_list[i_osv]
-        list_of_osvs[i_osv] = list_of_osvs_copy[index_to_replace].__copy__()
-
-    return list_of_osvs
-
-
-def merge_osv_list(list_of_osvs1, list_of_osvs2):
-    """
-    Merge the two orbit state vector list (OSV list) in orbit files into one.
-    Apply sorting to make sure the OSVs are in chronological order
-    `list_of_osvs1` will be the "base OSV list" while the OSVs in
-    `list_of_osvs2` not in the time range of the base OSV list will be
-    appended.
-
-    Parameters
-    ---------
-        list_of_osv1: ElementTree
-            Based OSV list
-        list_of_osve2: ElementTree
-            OSV list to be augmented to the base OSV list
-
-    Returns
-    -------
-        list_of_osvs1: ElementTree
-            Merged OSV list
-    """
-    # Extract the UTC from the OSV of the first XML
-    osv1_utc_list = [_get_utc_time_from_osv(osv1) for osv1 in list_of_osvs1]
-
-    min_utc_osv1 = min(osv1_utc_list)
-    max_utc_osv1 = max(osv1_utc_list)
-
-    for osv in list_of_osvs2.findall("OSV"):
-        utc_osv2 = _get_utc_time_from_osv(osv)
-
-        if min_utc_osv1 < utc_osv2 < max_utc_osv1:
-            continue
-        list_of_osvs1.append(osv)
-
-    # sort the OSVs in the conatenated OSV
-    list_of_osvs1 = _sort_list_of_osv(list_of_osvs1)
-
-    # Adjust the count attribute in <List_of_OSVs>
-    new_count = len(list_of_osvs1.findall("OSV"))
-    list_of_osvs1.set("count", str(new_count))
-
-    return list_of_osvs1
-
-
 def _get_utc_time_from_osv(osv):
     """
     Extract the UTC time from orbit state vector element in orbit file
@@ -701,7 +628,6 @@ def check_dateline(poly):
     return polys
 
 
-
 def unzip_safe(file_path: str | Path, output_directory: Path):
     # Extracts the zip file ensuring a consistent folder structure
 
@@ -722,7 +648,10 @@ def unzip_safe(file_path: str | Path, output_directory: Path):
             # Extract , then after move up one directory
             zip_ref.extractall(output_directory)
             # Get the subdirectory name (file name without .zip)
-            shutil.move(output_directory / manifest_parts[0] / manifest_parts[1], output_directory)
+            shutil.move(
+                output_directory / manifest_parts[0] / manifest_parts[1],
+                output_directory,
+            )
             # extraction_path = output_directory / safe_name
             # # Move the contents of the subdirectory up one level
             # for f in extraction_path.iterdir():
@@ -794,7 +723,7 @@ def get_burst_rows(
             return
         bursts = bursts_from_safe_dir(safe_file, orbit_file)
         # all_rows.append(list(map(_to_row, bursts, safe_file))
-        logger.info(f"Found {len(bursts)} bursts in {safe_file}")
+        logger.debug(f"Found {len(bursts)} bursts in {safe_file}")
         all_rows = [_to_row(burst, safe_file) for burst in bursts]
 
         # pd.DataFrame(all_rows).to_csv(outfile, header=False, mode="w", index=False)
@@ -817,7 +746,7 @@ def _to_csv(row_list: list, outfile: str | Path):
     """Write a csv without pandas."""
     import csv
 
-    logger.info(f"Writing {len(row_list)} rows to {outfile}")
+    logger.debug(f"Writing {len(row_list)} rows to {outfile}")
     with open(outfile, "w") as f:
         writer = csv.writer(f)
         writer.writerows(row_list)
@@ -1005,7 +934,7 @@ def main() -> None:
             save_dir=out_dir,
             date=date_range[0],
             mission=f"S1{args.satellite}",
-        )
+        )[0]
 
         logger.info("Finding bursts in SAFE files")
         make_all_safe_metadata(
