@@ -716,11 +716,11 @@ def get_burst_rows(
     safe_file: str | Path,
     orbit_file: str | Path,
     out_dir: str | Path,
-):
+) -> Path:
     try:
         outfile = (Path(out_dir) / Path(safe_file).stem).with_suffix(".csv")
         if outfile.exists():
-            return
+            return outfile
         bursts = bursts_from_safe_dir(safe_file, orbit_file)
         # all_rows.append(list(map(_to_row, bursts, safe_file))
         logger.debug(f"Found {len(bursts)} bursts in {safe_file}")
@@ -732,6 +732,7 @@ def get_burst_rows(
         logger.warning(f"Failure on {safe_file}: {e}")
         outfile = (Path(out_dir) / f"failure_{Path(safe_file).stem}").touch()
         raise
+    return outfile
 
 
 def _to_row(burst: S1Burst, safe_file: str | Path):
@@ -817,12 +818,11 @@ def make_all_safe_metadata(
     out_dir: str | Path,
     orbit_file: str | Path,
     max_workers=20,
-):
+) -> list[Path]:
     warnings.filterwarnings("ignore", category=UserWarning)  # s1reader is chatty
 
-    def _run(file):
-        get_burst_rows(file, orbit_file=orbit_file, out_dir=out_dir)
-
+    # def _run(file):
+    #     get_burst_rows(file, orbit_file=orbit_file, out_dir=out_dir)
     # Use thread_map
     # thread_map(
     #     _run,
@@ -830,9 +830,11 @@ def make_all_safe_metadata(
     #     max_workers=1,
     #     desc="Extracting Burst Metadata",
     # )
+    csv_files = []
     for file in safe_list:
         # _run(file)
-        get_burst_rows(file, orbit_file=orbit_file, out_dir=out_dir)
+        csv_files.append(get_burst_rows(file, orbit_file=orbit_file, out_dir=out_dir))
+    return csv_files
 
 
 def main() -> None:
@@ -943,7 +945,7 @@ def main() -> None:
         )[0]
 
         logger.info("Finding bursts in SAFE files")
-        make_all_safe_metadata(
+        csv_files = make_all_safe_metadata(
             safe_list=safes,
             out_dir=out_dir,
             orbit_file=orbit_file,
@@ -952,9 +954,8 @@ def main() -> None:
 
         # Combine all the CSVs into one per date
         logger.info("Combining CSVs")
-        all_csvs = list(out_dir.glob("*.csv"))
         all_rows = []
-        for csv in all_csvs:
+        for csv in csv_files:
             # all_rows.extend(pd.read_csv(csv, header=None).values.tolist())
             rows = csv.read_text().splitlines()
             all_rows.extend([row.split(",") for row in rows])
@@ -972,10 +973,11 @@ def main() -> None:
             args.bucket,
             f"{args.out_folder}/{date_output.name}",
         )
+
         if not args.no_clean:
             date_output.unlink()
-        # Clean up the SAFE files
-        if not args.no_clean:
+            # Clean up the SAFE files
+            Path(orbit_file).unlink()
             for file in out_dir.glob("*.SAFE*"):
                 if file.is_dir():
                     shutil.rmtree(file)
