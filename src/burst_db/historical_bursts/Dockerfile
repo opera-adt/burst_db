@@ -61,7 +61,7 @@ COPY --chown=$MAMBA_USER:$MAMBA_USER . .
 # Activate, otherwise python will not be found
 # https://github.com/mamba-org/micromamba-docker#running-commands-in-dockerfile-within-the-conda-environment
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
-RUN python -m pip install --no-deps https://github.com/scottstanie/asfsmd/archive/s3fs-client.zip
+RUN python -m pip install https://github.com/scottstanie/asfsmd/archive/s3fs-client.zip
 
 # Run the entrypoint from the /work directory
 # This means if they mount a volume to /work, we won't be mixing in the repository code

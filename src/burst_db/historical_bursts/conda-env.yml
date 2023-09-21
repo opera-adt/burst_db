@@ -1,5 +1,5 @@
 # mamba create -n aws-batch python=3.11 prefect s1reader pip s3fs earthaccess rich shapely
-name: dolphin-env
+name: burst-db-env
 channels:
   - conda-forge
 dependencies:
@@ -7,6 +7,7 @@ dependencies:
   - pip>=21.3  # https://pip.pypa.io/en/stable/reference/build-system/pyproject-toml/#editable-installation
   - lxml
   - awscli
+  - backoff
   - boto3
   - earthaccess
   - rich>=12.0

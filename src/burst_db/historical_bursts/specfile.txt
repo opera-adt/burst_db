@@ -19,7 +19,7 @@ https://conda.anaconda.org/conda-forge/linux-64/aws-c-sdkutils-0.1.9-h4f47f36_1.
 https://conda.anaconda.org/conda-forge/linux-64/brotlipy-0.7.0-py311hd4cff14_1005.tar.bz2#9bdac7084ecfc08338bae1b976535724
 https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-h7f98852_4.tar.bz2#a1fd65c7ccbf10880423d82bca54eb54
 https://conda.anaconda.org/conda-forge/linux-64/ca-certificates-2023.7.22-hbcca054_0.conda#a73ecd2988327ad4c8f2c331482917f2
-https://conda.anaconda.org/conda-forge/linux-64/cffi-1.15.1-py311h409f033_3.conda#9025d0786dbbe4bc91fd8e85502decce
+https://conda.anaconda.org/conda-forge/linux-64/cffi-1.15.1-py311hb3a22ac_4.conda#a9547207cb208607e180dd524a6f28c1
 https://conda.anaconda.org/conda-forge/linux-64/cryptography-40.0.1-py311h9b4c7bb_0.conda#7638d1e31ce0a029211e12fc719e52e6
 https://conda.anaconda.org/conda-forge/linux-64/docutils-0.19-py311h38be061_1.tar.bz2#599159b0740e9b82e7eef0e8471be3c2
 https://conda.anaconda.org/conda-forge/linux-64/frozenlist-1.4.0-py311h459d7ec_0.conda#54bd8f0776418b17a8eccd6f10181f95
@@ -69,6 +69,7 @@ https://conda.anaconda.org/conda-forge/noarch/aioitertools-0.11.0-pyhd8ed1ab_0.t
 https://conda.anaconda.org/conda-forge/noarch/aiosignal-1.3.1-pyhd8ed1ab_0.tar.bz2#d1e1eb7e21a9e2c74279d87dafb68156
 https://conda.anaconda.org/conda-forge/noarch/async-timeout-4.0.3-pyhd8ed1ab_0.conda#3ce482ec3066e6d809dbbb1d1679f215
 https://conda.anaconda.org/conda-forge/noarch/attrs-23.1.0-pyh71513ae_1.conda#3edfead7cedd1ab4400a6c588f3e75f8
+https://conda.anaconda.org/conda-forge/noarch/backoff-2.2.1-pyhd8ed1ab_0.tar.bz2#4600709bd85664d8606ae0c76642f8db
 https://conda.anaconda.org/conda-forge/noarch/backports-1.0-pyhd8ed1ab_3.conda#54ca2e08b3220c148a1d8329c2678e02
 https://conda.anaconda.org/conda-forge/noarch/backports.functools_lru_cache-1.6.5-pyhd8ed1ab_0.conda#6b1b907661838a75d067a22f87996b2e
 https://conda.anaconda.org/conda-forge/noarch/boto3-1.28.17-pyhd8ed1ab_0.conda#56024afda15a361ec88b07e99205726e
@@ -79,7 +80,7 @@ https://conda.anaconda.org/conda-forge/noarch/charset-normalizer-3.2.0-pyhd8ed1a
 https://conda.anaconda.org/conda-forge/noarch/click-8.1.7-unix_pyh707e725_0.conda#f3ad426304898027fc619827ff428eca
 https://conda.anaconda.org/conda-forge/noarch/colorama-0.4.6-pyhd8ed1ab_0.tar.bz2#3faab06a954c2a04039983f2c4a50d99
 https://conda.anaconda.org/conda-forge/noarch/distro-1.8.0-pyhd8ed1ab_0.conda#67999c5465064480fa8016d00ac768f6
-https://conda.anaconda.org/conda-forge/noarch/earthaccess-0.5.3-pyhd8ed1ab_0.conda#7a7142c3a6cc8bb8963958cb628810e2
+https://conda.anaconda.org/conda-forge/noarch/earthaccess-0.6.1-pyhd8ed1ab_0.conda#f11bd0706b9d6629caf45050e250dcff
 https://conda.anaconda.org/conda-forge/noarch/fsspec-2023.9.1-pyh1a96a4e_0.conda#d69753ff6ee3c84a6638921dd95db662
 https://conda.anaconda.org/conda-forge/noarch/geojson-3.0.1-pyhd8ed1ab_0.conda#8eb984c44a52c3a211a013ac32bbd38c
 https://conda.anaconda.org/conda-forge/noarch/geomet-1.0.0-pyhd8ed1ab_0.tar.bz2#c5d78ad9b80fb4e03be224a9d8c366e2

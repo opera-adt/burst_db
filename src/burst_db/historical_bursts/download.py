@@ -2,22 +2,17 @@
 from __future__ import annotations
 
 import argparse
-import boto3
-import os
-import sys
-import zipfile
-
-from pathlib import Path
-from itertools import chain
-import shutil
-
-from asfsmd import make_patterns, download_annotations
-import backoff
-from tqdm.contrib.concurrent import thread_map
-from tqdm.auto import tqdm
-
 import logging
+import os
+import shutil
+from itertools import chain
+from pathlib import Path
+
+import boto3
+from asfsmd import download_annotations, make_patterns
+from eof import products
 from rich.logging import RichHandler
+from tqdm.contrib.concurrent import thread_map
 
 logger = logging.getLogger("burst_db")
 h = RichHandler(rich_tracebacks=True, log_time_format="[%Y-%m-%d %H:%M:%S]")
@@ -50,7 +45,7 @@ def download_safe_metadata(
         logger.error(f"Error downloading data from {remaining_products}", exc_info=True)
 
 
-@backoff.on_exception(backoff.expo, Exception, max_tries=3)
+# @backoff.on_exception(backoff.expo, Exception, max_tries=2)
 def _download_safe_metadata(
     product_name: str,
     pol: str = "vv",
@@ -89,12 +84,24 @@ def zip_and_upload(
     s3 = boto3.client("s3")
     logger.info(f"Uploading {len(safe_dirs)} safe_dirs to S3")
     for safe_dir in safe_dirs:
-        zip_file = Path(shutil.make_archive(str(safe_dir), "zip", str(safe_dir)))
+        zip_file = Path(
+            shutil.make_archive(
+                str(safe_dir),
+                "zip",
+                root_dir=str(safe_dir.parent),
+                base_dir=safe_dir.name,
+            )
+        )
+
+        # Get the time to use for the S3 key
+        acq_time = products.Sentinel(str(zip_file)).start_time
+        # key = f"{folder_name}/{zip_file.name}"
+        # Use the year/month like YYYY/MM for a folder structure
+        date_str = acq_time.strftime("%Y/%m")
+        key = f"{folder_name}/{date_str}/{zip_file.name}"
 
         # Upload the zip safe_dir to S3
-        s3.upload_file(
-            Filename=zip_file, Bucket=bucket_name, Key=f"{folder_name}/{zip_file.name}"
-        )
+        s3.upload_file(Filename=zip_file, Bucket=bucket_name, Key=key)
 
         # Optionally: remove the local zip safe_dir after upload
         if remove_local:
@@ -109,7 +116,6 @@ def _get_product_list_cmr(search_dir: str):
     return list(
         chain.from_iterable(path.read_text().splitlines() for path in safe_lists)
     )
-
 
 
 def _get_parser():
@@ -144,7 +150,7 @@ def _get_parser():
         type=int,
         help="Index of the last batch to download.",
     )
-    
+
     parser.add_argument(
         "--max-workers",
         default=3,
@@ -156,8 +162,9 @@ def _get_parser():
     )
     return parser
 
+
 def main() -> None:
-    """Download Sentinel-1 metadata from a WKT file."""
+    """Download Sentinel-1 metadata directly from S3."""
     parser = _get_parser()
     args = parser.parse_args()
     arg_dict = vars(args)
@@ -195,6 +202,7 @@ def main() -> None:
 
     start_idx = args.start_idx
     end_idx = len(batches) if args.end_idx is None else args.end_idx
+    end_idx = min(end_idx, len(batches))
 
     # Download the SAFE metadata
     thread_map(
