@@ -2,7 +2,7 @@
 ARG BASE=ubuntu:22.04
 
 # bring in the micromamba image so we can copy files from it
-FROM mambaorg/micromamba:1.5.0
+FROM mambaorg/micromamba:1.5.0 as micromamba
 
 FROM $BASE
 
@@ -68,4 +68,4 @@ RUN python -m pip install --no-deps https://github.com/scottstanie/asfsmd/archiv
 WORKDIR /work
 
 ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
-CMD ["download.py"]
+# CMD ["download.py"]

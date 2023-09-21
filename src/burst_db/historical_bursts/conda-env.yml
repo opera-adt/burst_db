@@ -5,6 +5,7 @@ channels:
 dependencies:
   - python=3.11
   - pip>=21.3  # https://pip.pypa.io/en/stable/reference/build-system/pyproject-toml/#editable-installation
+  - lxml
   - awscli
   - boto3
   - earthaccess
@@ -13,6 +14,10 @@ dependencies:
   - shapely>=1.8
   - requests
   - s3fs
+  - s5cmd
+  - scipy
+  - sentineleof
+  - tqdm
   # - pip:
   #   - https://github.com/scottstanie/asfsmd/archive/s3fs-client.zip  # My branch with changes
 

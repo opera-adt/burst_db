@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 import argparse
 import datetime
+import json
 import logging
 import os
+import shutil
+import subprocess
 import warnings
 import zipfile
 from dataclasses import astuple, dataclass
@@ -13,7 +16,8 @@ from typing import ClassVar
 import boto3
 import lxml.etree as ET
 import numpy as np
-import pandas as pd
+
+# import pandas as pd
 import shapely.wkt
 from dateutil.parser import parse
 from eof import download
@@ -345,66 +349,24 @@ def _bursts_from_xml(annotation_path: str, orbit_path: str, open_method=open):
 
 
 @cache
-def get_osv_list_from_orbit(orbit_file: str | list):
+def get_osv_list_from_orbit(orbit_file: str):
     """
     Get the list of orbit state vectors as ElementTree (ET) objects from the orbit file `orbit_file`
-
-    - When `orbit_file` is a list, then all of the OSV lists are
-      merged and sorted. The merging is done by concatenating
-      the OSVs to the "base OSV list".
-    - The "base OSV list" is the one that covers
-      the swath's start / stop time with padding applied,
-      so that the equal time spacing is guaranteed during that time period.
 
     Parameters
     ----------
     orbit_file: str | list
         Orbit file name, or list of the orbit file names
-    swath_start: datetime.datetime
-        Sensing start time of the swath
-    swath_stop: datetime.datetime
-        Sensing stop time of the swath
 
     Returns
     -------
     orbit_state_vector_list: ET
         Orbit state vector list
     """
-    if isinstance(orbit_file, str):
-        orbit_tree = ET.parse(orbit_file)
-        orbit_state_vector_list = orbit_tree.find("Data_Block/List_of_OSVs")
-        return orbit_state_vector_list
+    orbit_tree = ET.parse(orbit_file)
+    orbit_state_vector_list = orbit_tree.find("Data_Block/List_of_OSVs")
+    return orbit_state_vector_list
 
-    elif isinstance(orbit_file, list) and len(orbit_file) == 1:
-        orbit_tree = ET.parse(orbit_file[0])
-        orbit_state_vector_list = orbit_tree.find("Data_Block/List_of_OSVs")
-        return orbit_state_vector_list
-
-    elif isinstance(orbit_file, list) and len(orbit_file) > 1:
-        # Concatenate the orbit files' OSV lists
-        # Assuming that the orbit was sorted, and the last orbit in the list if the one that
-        # covers the sensing start / stop with padding (i.e. the base orbit file in this function)
-
-        # Load the base orbit file
-        base_orbit_tree = ET.parse(orbit_file[-1])
-        orbit_state_vector_list = base_orbit_tree.find("Data_Block/List_of_OSVs")
-
-        for i_orbit, src_orbit_filename in enumerate(orbit_file):
-            if i_orbit == len(orbit_file) - 1:
-                continue
-            src_orbit_tree = ET.parse(src_orbit_filename)
-            src_osv_vector_list = src_orbit_tree.find("Data_Block/List_of_OSVs")
-            orbit_state_vector_list = merge_osv_list(
-                orbit_state_vector_list, src_osv_vector_list
-            )
-
-        return orbit_state_vector_list
-
-    else:
-        raise RuntimeError(
-            "Invalid orbit information provided. "
-            "It has to be filename or the list of filenames."
-        )
 
 
 def _sort_list_of_osv(list_of_osvs):
@@ -739,6 +701,38 @@ def check_dateline(poly):
     return polys
 
 
+
+def unzip_safe(file_path: str | Path, output_directory: Path):
+    # Extracts the zip file ensuring a consistent folder structure
+
+    safe_name = Path(file_path).stem
+    with zipfile.ZipFile(file_path, "r") as zip_ref:
+        # If the zip starts with "safe_folders/", then adjust extraction
+        # get the number of parts in the `manifest`
+        manifest_parts = [
+            Path(f).parts for f in zip_ref.namelist() if "manifest.safe" in f
+        ][0]
+        manifest_level = len(manifest_parts)
+
+        # Determine extraction logic based on contents
+        if manifest_level == 2:
+            # Extract everything to the output directory
+            zip_ref.extractall(output_directory)
+        elif manifest_level == 3:
+            # Extract , then after move up one directory
+            zip_ref.extractall(output_directory)
+            # Get the subdirectory name (file name without .zip)
+            shutil.move(output_directory / manifest_parts[0] / manifest_parts[1], output_directory)
+            # extraction_path = output_directory / safe_name
+            # # Move the contents of the subdirectory up one level
+            # for f in extraction_path.iterdir():
+            #     shutil.move(f, output_directory)
+        else:
+            # Determine the subdirectory name (file name without .zip)
+            extraction_path = output_directory / safe_name
+            zip_ref.extractall(extraction_path)
+
+
 def bursts_from_safe_dir(safe_path: str, orbit_path: str) -> list[S1Burst]:
     """Find S1Bursts in a Sentinel-1 SAFE structured directory/zipfile.
 
@@ -756,29 +750,36 @@ def bursts_from_safe_dir(safe_path: str, orbit_path: str) -> list[S1Burst]:
     """
 
     def _is_zip_annotation(path: str):
-        return path.split("/")[-2] == "annotation" and path.endswith(".xml")
+        return "annotation" in path and path.endswith(".xml")
 
     # find annotation file - subswath of interest
     path = Path(safe_path)
     bursts = []
     if path.suffix == ".zip":
-        with zipfile.ZipFile(path, "r") as z_file:
-            z_file_list = z_file.namelist()
+        unzip_safe(safe_path, path.parent)
+        path = path.parent / path.stem
+        # with zipfile.ZipFile(path, "r") as z_file:
+        #     z_file_list = z_file.namelist()
 
-            # find annotation file - subswath of interest
-            annotation_files = [f for f in z_file_list if _is_zip_annotation(f)]
+        #     # find annotation file - subswath of interest
+        #     annotation_files = [f for f in z_file_list if _is_zip_annotation(f)]
 
-            for f_annotation in annotation_files:
-                bursts.extend(
-                    _bursts_from_xml(f_annotation, orbit_path, open_method=z_file.open)
-                )
-    elif path.is_dir():
-        annotation_files = (path / "annotation").glob("s1*-iw*-slc-*")
+        #     for f_annotation in annotation_files:
+        #         bursts.extend(
+        #             _bursts_from_xml(f_annotation, orbit_path, open_method=z_file.open)
+        #         )
+    # elif path.is_dir():
+    annotation_files = (path / "annotation").glob("s1*-iw*-slc-*")
+    if not annotation_files:
+        raise ValueError(f"No annotation files found in {path}")
 
-        for f_annotation in annotation_files:
-            bursts.extend(_bursts_from_xml(str(f_annotation), orbit_path))
-    else:
-        raise ValueError(f"Unknown file type, not a .zip or dir: {safe_path}")
+    for f_annotation in annotation_files:
+        bursts.extend(_bursts_from_xml(str(f_annotation), orbit_path))
+    if not bursts:
+        breakpoint()
+
+    # else:
+    #     raise ValueError(f"Unknown file type, not a .zip or dir: {safe_path}")
     return bursts
 
 
@@ -793,12 +794,15 @@ def get_burst_rows(
             return
         bursts = bursts_from_safe_dir(safe_file, orbit_file)
         # all_rows.append(list(map(_to_row, bursts, safe_file))
+        logger.info(f"Found {len(bursts)} bursts in {safe_file}")
         all_rows = [_to_row(burst, safe_file) for burst in bursts]
 
-        pd.DataFrame(all_rows).to_csv(outfile, header=False, mode="w", index=False)
+        # pd.DataFrame(all_rows).to_csv(outfile, header=False, mode="w", index=False)
+        _to_csv(all_rows, outfile)
     except Exception as e:
-        print(f"Failure on {safe_file}: {e}")
+        logger.warning(f"Failure on {safe_file}: {e}")
         outfile = (Path(out_dir) / f"failure_{Path(safe_file).stem}").touch()
+        raise
 
 
 def _to_row(burst: S1Burst, safe_file: str | Path):
@@ -807,6 +811,16 @@ def _to_row(burst: S1Burst, safe_file: str | Path):
     # Get an approximate border, fewer points
     border = burst.border.simplify(1 / 3600).wkt
     return burst_id, dt, border, Path(safe_file).stem
+
+
+def _to_csv(row_list: list, outfile: str | Path):
+    """Write a csv without pandas."""
+    import csv
+
+    logger.info(f"Writing {len(row_list)} rows to {outfile}")
+    with open(outfile, "w") as f:
+        writer = csv.writer(f)
+        writer.writerows(row_list)
 
 
 PREFIX_TEMPLATE = "S1{sat}_IW_SLC__1S{sd}V_{datestr}"
@@ -819,25 +833,53 @@ def pull_safes_for_date(
     satellite: str = "A",
     single_or_double: str = "D",
     out_dir: str | Path = ".",
-):
+    max_workers: int = 10,
+) -> list[Path]:
     """Download SAFE files from S3 for a given date."""
-    import boto3
-
-    s3 = boto3.client("s3")
     search_term = PREFIX_TEMPLATE.format(
-        sat=satellite, sd=single_or_double, datestr=date.strftime("%Y%m%d")
+        # sat=satellite, sd=single_or_double, datestr=date.strftime("%Y%m%d")
+        sat=satellite,
+        sd=single_or_double,
+        datestr=date.strftime("%Y%m%dT01"),
     )
     prefix = f"{in_folder}/{search_term}"
-    print(prefix)
-    response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
-    if response["KeyCount"] == 0:
+    full_s3_path = f"s3://{bucket}/{prefix}"
+    cmd = [
+        "s5cmd",
+        "--json",
+        "--numworkers",
+        str(max_workers),
+        "cp",
+        f"{full_s3_path}*",
+        str(out_dir.resolve()),
+    ]
+    out = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        check=True,
+    )
+    loaded = list(map(json.loads, out.stdout.splitlines()))
+    if not loaded:
         logger.info(f"No files found for {date}")
         return []
-    keys = [x["Key"] for x in response["Contents"]]
-    s3.download_file(bucket, keys[0], "tmp.zip")
-    with zipfile.ZipFile("tmp.zip", "r") as z:
-        z.extractall(out_dir)
-    return [Path(x).stem for x in z.namelist()]
+    loaded_paths = []
+    for d in loaded:
+        if not d["success"]:
+            logger.error(f"Failed to download {d['source']}")
+        else:
+            loaded_paths.append(Path(d["destination"]))
+    return loaded_paths
+
+    # s3 = boto3.client("s3")
+    # response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
+    # if response["KeyCount"] == 0:
+    #     logger.info(f"No files found for {date}")
+    #     return []
+    # keys = [x["Key"] for x in response["Contents"]]
+    # s3.download_file(bucket, keys[0], "tmp.zip")
+    # with zipfile.ZipFile("tmp.zip", "r") as z:
+    #     z.extractall(out_dir)
+    # return [Path(x).stem for x in z.namelist()]
 
 
 def make_all_safe_metadata(
@@ -847,20 +889,21 @@ def make_all_safe_metadata(
     orbit_file: str | Path,
     max_workers=20,
 ):
-    print(f"Writing CSVs to {out_dir}")
-
     warnings.filterwarnings("ignore", category=UserWarning)  # s1reader is chatty
 
     def _run(file):
         get_burst_rows(file, orbit_file=orbit_file, out_dir=out_dir)
 
     # Use thread_map
-    thread_map(
-        _run,
-        safe_list,
-        max_workers=1,
-        desc="Extracting Burst Metadata",
-    )
+    # thread_map(
+    #     _run,
+    #     safe_list,
+    #     max_workers=1,
+    #     desc="Extracting Burst Metadata",
+    # )
+    for file in safe_list:
+        # _run(file)
+        get_burst_rows(file, orbit_file=orbit_file, out_dir=out_dir)
 
 
 def main() -> None:
@@ -928,18 +971,12 @@ def main() -> None:
     # Get range of dates to download
     start_date = args.start_date
     end_date = args.end_date
-    date_range = pd.date_range(start_date, end_date)
-
-    # orbit_file = args.orbit_file
-    # orbit_file = (
-    #     "S1A_OPER_AUX_POEORB_OPOD_20210305T182757_V20150202T225944_20150204T005944.EOF"
-    # )
-    # make_all_safe_metadata(
-    #     safe_list=Path(args.safe_list).read_text().splitlines(),
-    #     out_dir=out_dir,
-    #     orbit_file=orbit_file,
-    # )
-    # return
+    # date_range = pd.date_range(start_date, end_date)
+    date_range = []
+    date = start_date
+    while date <= end_date:
+        date_range.append(date)
+        date += datetime.timedelta(days=1)
 
     # For each date, download the SAFE files
     for date in date_range:
@@ -976,22 +1013,20 @@ def main() -> None:
             out_dir=out_dir,
             orbit_file=orbit_file,
             max_workers=args.max_workers,
-        )   
+        )
 
         # Combine all the CSVs into one per date
         logger.info("Combining CSVs")
         all_csvs = list(out_dir.glob("*.csv"))
         all_rows = []
         for csv in all_csvs:
-            all_rows.extend(pd.read_csv(csv, header=None).values.tolist())
-            csv.unlink()
+            # all_rows.extend(pd.read_csv(csv, header=None).values.tolist())
+            rows = csv.read_text().splitlines()
+            all_rows.extend([row.split(",") for row in rows])
+            # csv.unlink()
+
         date_output = out_dir / f"{date.strftime('%Y%m%d')}.csv"
-        pd.DataFrame(all_rows).to_csv(
-            date_output,
-            header=False,
-            mode="w",
-            index=False,
-        )
+        _to_csv(all_rows, date_output)
 
         # Upload to S3
         logger.info("Uploading to S3")
@@ -1001,8 +1036,7 @@ def main() -> None:
             args.bucket,
             f"{args.out_folder}/{date_output.name}",
         )
-        date_output.unlink()
-
+        # date_output.unlink()
 
 
 if __name__ == "__main__":
