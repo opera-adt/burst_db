@@ -7,15 +7,12 @@ import argparse
 
 
 def convert_to_aws_json_array(env_var_dict):
+    """Convert a normal dictionary to an AWS JSON array."""
     json_array = [{"name": key, "value": value} for key, value in env_var_dict.items()]
     return json_array
 
 
 def get_aws_credentials():
-
-    if auth_object is None:
-        print("Failed to authenticate with Earthdata.")
-        return None
 
     try:
         cmr_token = os.environ["CMR_TOKEN"]
@@ -43,11 +40,20 @@ def update_job_definition(input_filename, output_filename):
     env_var_credentials = get_aws_credentials()
 
     if env_var_credentials:
-        new_env_vars = convert_to_aws_json_array(env_var_credentials)
         if "containerOverrides" not in job_definition:
             job_definition["containerOverrides"] = {}
         if "environment" not in job_definition["containerOverrides"]:
             job_definition["containerOverrides"]["environment"] = []
+
+        # Remove existing AWS credentials
+        job_definition["containerOverrides"]["environment"] = [
+            env_var
+            for env_var in job_definition["containerOverrides"]["environment"]
+            # Skip the one's whose name is not in the env_var_credentials keys
+            if env_var["name"] not in env_var_credentials
+        ]
+
+        new_env_vars = convert_to_aws_json_array(env_var_credentials)
         job_definition["containerOverrides"]["environment"].extend(new_env_vars)
 
         with open(output_filename, "w") as f:

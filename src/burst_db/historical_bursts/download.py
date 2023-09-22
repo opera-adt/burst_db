@@ -11,7 +11,7 @@ import time
 
 import boto3
 from asfsmd import download_annotations, make_patterns
-from eof import products
+# from eof import products
 from tqdm.contrib.concurrent import thread_map
 
 logger = logging.getLogger("burst_db")
@@ -111,11 +111,12 @@ def zip_and_upload(
         )
 
         # Get the time to use for the S3 key
-        acq_time = products.Sentinel(str(zip_file)).start_time
-        # key = f"{folder_name}/{zip_file.name}"
-        # Use the year/month like YYYY/MM for a folder structure
-        date_str = acq_time.strftime("%Y/%m")
-        key = f"{folder_name}/{date_str}/{zip_file.name}"
+        key = f"{folder_name}/{zip_file.name}"
+        # # Use the year/month like YYYY/MM for a folder structure
+        # acq_time = products.Sentinel(str(zip_file)).start_time
+        # date_str = acq_time.strftime("%Y/%m")
+        # key = f"{folder_name}/{date_str}/{zip_file.name}"
+
 
         # Upload the zip safe_dir to S3
         s3.upload_file(Filename=zip_file, Bucket=bucket_name, Key=key)

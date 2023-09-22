@@ -748,7 +748,7 @@ def _to_csv(row_list: list, outfile: str | Path):
 
     logger.debug(f"Writing {len(row_list)} rows to {outfile}")
     with open(outfile, "w") as f:
-        writer = csv.writer(f)
+        writer = csv.writer(f, delimiter=';')
         writer.writerows(row_list)
 
 
