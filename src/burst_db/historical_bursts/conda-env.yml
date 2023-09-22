@@ -10,7 +10,6 @@ dependencies:
   - backoff
   - boto3
   - earthaccess
-  - rich>=12.0
   # - s1reader
   - shapely>=1.8
   - requests

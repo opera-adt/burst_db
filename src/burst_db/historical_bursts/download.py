@@ -7,15 +7,23 @@ import os
 import shutil
 from itertools import chain
 from pathlib import Path
+import time
 
 import boto3
 from asfsmd import download_annotations, make_patterns
 from eof import products
-from rich.logging import RichHandler
 from tqdm.contrib.concurrent import thread_map
 
 logger = logging.getLogger("burst_db")
-h = RichHandler(rich_tracebacks=True, log_time_format="[%Y-%m-%d %H:%M:%S]")
+# Make a logger good for AWS logs
+h = logging.StreamHandler()
+h.setFormatter(
+    logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S%z",
+    )
+)
+
 logger.addHandler(h)
 logger.setLevel(logging.INFO)
 
@@ -42,7 +50,16 @@ def download_safe_metadata(
     try:
         _download_safe_metadata(remaining_products, pol=pol, outdir=Path(outdir))
     except Exception:
-        logger.error(f"Error downloading data from {remaining_products}", exc_info=True)
+        logger.error(f"Error downloading data from {remaining_products}")
+        # Try once more
+        time.sleep(20)
+        try:
+            _download_safe_metadata(remaining_products, pol=pol, outdir=Path(outdir))
+        except Exception:
+            logger.error(
+                f"Error downloading data from {remaining_products}", exc_info=True
+            )
+        
 
 
 # @backoff.on_exception(backoff.expo, Exception, max_tries=2)
@@ -82,7 +99,7 @@ def zip_and_upload(
     # Zip the safe_dirs
     # Create an S3 client
     s3 = boto3.client("s3")
-    logger.info(f"Uploading {len(safe_dirs)} safe_dirs to S3")
+    logger.info(f"Uploading {len(safe_dirs)} safe_dirs to s3://{bucket_name}/{folder_name}")
     for safe_dir in safe_dirs:
         zip_file = Path(
             shutil.make_archive(
@@ -192,6 +209,7 @@ def main() -> None:
     os.environ["ASFSMD_CLIENT"] = "s3fs"
 
     def _download_and_save_s3(batch_idx: int):
+        logger.info(f"Downloading batch {batch_idx} of {len(batches)}")
         batch = batches[batch_idx]
         cur_out_dir = out_dir / f"batch_{batch_idx}"
         cur_out_dir.mkdir(exist_ok=True)

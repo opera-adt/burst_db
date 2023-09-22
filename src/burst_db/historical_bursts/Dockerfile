@@ -65,7 +65,7 @@ RUN python -m pip install https://github.com/scottstanie/asfsmd/archive/s3fs-cli
 
 # Run the entrypoint from the /work directory
 # This means if they mount a volume to /work, we won't be mixing in the repository code
-WORKDIR /work
+WORKDIR /home/$MAMBA_USER
 
 ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
 # CMD ["download.py"]

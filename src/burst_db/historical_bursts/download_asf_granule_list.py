@@ -18,12 +18,20 @@ from shapely.geometry import shape
 from tqdm.contrib.concurrent import thread_map
 
 import logging
-from rich.logging import RichHandler
+
 
 logger = logging.getLogger("burst_db")
-h = RichHandler(rich_tracebacks=True, log_time_format="[%Y-%m-%d %H:%M:%S]")
+# Make a logger good for AWS logs
+h = logging.StreamHandler()
+h.setFormatter(
+    logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S%z",
+    )
+)
 logger.addHandler(h)
 logger.setLevel(logging.INFO)
+
 
 logging.getLogger("asfsmd").setLevel(logging.WARNING)
 

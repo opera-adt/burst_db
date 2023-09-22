@@ -18,16 +18,23 @@ import lxml.etree as ET
 import numpy as np
 
 # import pandas as pd
+import shapely.ops
 import shapely.wkt
 from dateutil.parser import parse
 from eof import download
-from rich.logging import RichHandler
 from scipy.interpolate import InterpolatedUnivariateSpline
 from shapely.geometry import LinearRing, MultiPolygon, Polygon
 from tqdm.contrib.concurrent import thread_map
 
 logger = logging.getLogger("burst_db")
-h = RichHandler(rich_tracebacks=True, log_time_format="[%Y-%m-%d %H:%M:%S]")
+# Make a logger good for AWS logs
+h = logging.StreamHandler()
+h.setFormatter(
+    logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S%z",
+    )
+)
 logger.addHandler(h)
 logger.setLevel(logging.INFO)
 
@@ -706,7 +713,7 @@ def get_burst_rows(
     safe_file: str | Path,
     orbit_file: str | Path,
     out_dir: str | Path,
-) -> Path:
+) -> Path | None:
     try:
         outfile = (Path(out_dir) / Path(safe_file).stem).with_suffix(".csv")
         if outfile.exists():
@@ -720,7 +727,9 @@ def get_burst_rows(
         _to_csv(all_rows, outfile)
     except Exception:
         logger.error(f"Failure on {safe_file}", exc_info=True)
-        outfile = (Path(out_dir) / f"failure_{Path(safe_file).stem}").touch()
+        return None
+        # outfile = (Path(out_dir) / f"failure_{Path(safe_file).stem}")
+        # outfile.touch()
     return outfile
 
 
@@ -742,24 +751,19 @@ def _to_csv(row_list: list, outfile: str | Path):
         writer.writerows(row_list)
 
 
-PREFIX_TEMPLATE = "S1{sat}_IW_SLC__1S{sd}V_{datestr}"
-
-
 def pull_safes_for_date(
     date: datetime.date,
     bucket: str,
     in_folder: str,
     satellite: str = "A",
-    single_or_double: str = "D",
+    single_or_double: str = "*",
     out_dir: str | Path = ".",
     max_workers: int = 10,
 ) -> list[Path]:
     """Download SAFE files from S3 for a given date."""
-    search_term = PREFIX_TEMPLATE.format(
-        # sat=satellite, sd=single_or_double, datestr=date.strftime("%Y%m%d")
-        sat=satellite,
-        sd=single_or_double,
-        datestr=date.strftime("%Y%m%d"),
+    search_template = "S1{sat}_IW_SLC__1S{sd}V_{datestr}"
+    search_term = search_template.format(
+        sat=satellite, sd=single_or_double, datestr=date.strftime("%Y%m%d")
     )
     prefix = f"{in_folder}/{search_term}"
     full_s3_path = f"s3://{bucket}/{prefix}"
@@ -822,7 +826,9 @@ def make_all_safe_metadata(
     csv_files = []
     for file in safe_list:
         # _run(file)
-        csv_files.append(get_burst_rows(file, orbit_file=orbit_file, out_dir=out_dir))
+        out = get_burst_rows(file, orbit_file=orbit_file, out_dir=out_dir)
+        if out is not None:
+            csv_files.append(out)
     return csv_files
 
 
@@ -842,9 +848,6 @@ def main() -> None:
     )
     parser.add_argument(
         "--out-folder", help="S3 folder name within bucket to upload results."
-    )
-    parser.add_argument(
-        "--safe-list", help="Text file with list of SAFE granule names.", type=Path
     )
     parser.add_argument(
         "--start-date",
@@ -876,12 +879,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--single-or-double",
-        default="D",
+        default="*",
         type=str,
-        choices=["S", "D"],
-        help="Single or dual polarization to download.",
+        choices=["*", "S", "D"],
+        help="Single or dual polarization to download. '*' pulls both.",
     )
-
     parser.add_argument(
         "--no-clean",
         action="store_true",
@@ -905,6 +907,7 @@ def main() -> None:
         date += datetime.timedelta(days=1)
 
     # For each date, download the SAFE files
+    s3 = boto3.client("s3")
     for date in date_range:
         logger.info(
             f"Pulling SAFE folder for {date}, S1{args.satellite},"
@@ -941,30 +944,38 @@ def main() -> None:
             max_workers=args.max_workers,
         )
 
-        # Combine all the CSVs into one per date
-        logger.info("Combining CSVs")
-        all_rows = []
-        for csv in csv_files:
-            # all_rows.extend(pd.read_csv(csv, header=None).values.tolist())
-            rows = csv.read_text().splitlines()
-            all_rows.extend([row.split(",") for row in rows])
-            if not args.no_clean:
-                csv.unlink()
+        # # Combine all the CSVs into one per date
+        # logger.info("Combining CSVs")
+        # all_rows = []
+        # for csv in csv_files:
+        #     # all_rows.extend(pd.read_csv(csv, header=None).values.tolist())
+        #     rows = csv.read_text().splitlines()
+        #     all_rows.extend([row.split(",") for row in rows])
+        #     if not args.no_clean:
+        #         csv.unlink()
+        #
+        # date_output = out_dir / f"{date.strftime('%Y%m%d')}.csv"
+        # _to_csv(all_rows, date_output)
 
-        date_output = out_dir / f"{date.strftime('%Y%m%d')}.csv"
-        _to_csv(all_rows, date_output)
+        logger.info(f"Uploading {len(csv_files)} to S3")
+        for file in csv_files:
+            logger.debug("Zipping output")
+            # file_to_upload = date_output.with_suffix(".csv.zip")
+            file_to_upload = file.with_suffix(".csv.zip")
+            with zipfile.ZipFile(file_to_upload, "w") as z:
+                # arcname is the name of the file inside the zip
+                z.write(file, arcname=file.name)
+            file.unlink()
 
-        # Upload to S3
-        logger.info("Uploading to S3")
-        s3 = boto3.client("s3")
-        s3.upload_file(
-            str(date_output),
-            args.bucket,
-            f"{args.out_folder}/{date_output.name}",
-        )
+            # title by satellite / date
+            year_month = date.strftime("%Y/%m")
+            key = f"{args.out_folder}/S1{args.satellite}/{year_month}/{file_to_upload}"
+            logger.info(f"Uploading {key} to S3")
+            s3.upload_file(str(file_to_upload), args.bucket, key)
 
         if not args.no_clean:
-            date_output.unlink()
+            for file in csv_files:
+                file.with_suffix(".csv.zip").unlink()
             # Clean up the SAFE files
             Path(orbit_file).unlink()
             for file in out_dir.glob("*.SAFE*"):
