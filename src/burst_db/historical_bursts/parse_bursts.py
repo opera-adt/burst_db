@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import ClassVar
 
 import boto3
+from botocore.config import Config
 import lxml.etree as ET
 import numpy as np
 
@@ -906,8 +907,10 @@ def main() -> None:
         date_range.append(date)
         date += datetime.timedelta(days=1)
 
+    config = Config(retries={"max_attempts": 10, "mode": "standard"})
+    s3 = boto3.client("s3", config=config)
+
     # For each date, download the SAFE files
-    s3 = boto3.client("s3")
     for date in date_range:
         logger.info(
             f"Pulling SAFE folder for {date}, S1{args.satellite},"
@@ -969,7 +972,7 @@ def main() -> None:
 
             # title by satellite / date
             year_month = date.strftime("%Y/%m")
-            key = f"{args.out_folder}/S1{args.satellite}/{year_month}/{file_to_upload}"
+            key = f"{args.out_folder}/S1{args.satellite}/{year_month}/{file_to_upload.name}"
             logger.info(f"Uploading {key} to S3")
             s3.upload_file(str(file_to_upload), args.bucket, key)
 
