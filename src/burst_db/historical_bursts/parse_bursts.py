@@ -748,7 +748,7 @@ def _to_csv(row_list: list, outfile: str | Path):
 
     logger.debug(f"Writing {len(row_list)} rows to {outfile}")
     with open(outfile, "w") as f:
-        writer = csv.writer(f, delimiter=';')
+        writer = csv.writer(f, delimiter=";")
         writer.writerows(row_list)
 
 
@@ -759,13 +759,36 @@ def pull_safes_for_date(
     satellite: str = "A",
     single_or_double: str = "*",
     out_dir: str | Path = ".",
-    max_workers: int = 10,
+    max_workers: int = 3,
+    full_safe_list: str | Path | None = None,
 ) -> list[Path]:
-    """Download SAFE files from S3 for a given date."""
+    """Download SAFE files from S3 for a given date.
+
+    If `full_safe_list` is passed, will search the text file
+    for the matching safe names to download.
+    Otherwise, uses `s5cmd` to perform a prefix search and `cp`.
+    """
     search_template = "S1{sat}_IW_SLC__1S{sd}V_{datestr}"
     search_term = search_template.format(
         sat=satellite, sd=single_or_double, datestr=date.strftime("%Y%m%d")
     )
+    if not full_safe_list:
+        return _s5cmd_copy(search_term, bucket, in_folder, out_dir, max_workers)
+    else:
+        matching_granules = _find_matching(search_term, full_safe_list)
+        zip_filenames = [f"{f}.SAFE.zip" for f in matching_granules]
+        return _get_objects(
+            zip_filenames, bucket, in_folder, out_dir, max_workers=max_workers
+        )
+
+
+def _s5cmd_copy(
+    search_term: str,
+    bucket: str,
+    in_folder: str,
+    out_dir: str | Path = ".",
+    max_workers: int = 10,
+) -> list[Path]:
     prefix = f"{in_folder}/{search_term}"
     full_s3_path = f"s3://{bucket}/{prefix}"
     cmd = [
@@ -784,7 +807,7 @@ def pull_safes_for_date(
     )
     loaded = list(map(json.loads, out.stdout.splitlines()))
     if not loaded:
-        logger.info(f"No files found for {date}")
+        logger.info(f"No files found matching {search_term}")
         return []
     loaded_paths = []
     for d in loaded:
@@ -804,6 +827,46 @@ def pull_safes_for_date(
     # with zipfile.ZipFile("tmp.zip", "r") as z:
     #     z.extractall(out_dir)
     # return [Path(x).stem for x in z.namelist()]
+
+
+def _find_matching(search_term: str, full_safe_list: str | Path) -> list[str]:
+    out = subprocess.run(
+        [
+            "grep",
+            "-G",  # Use regex grep
+            search_term.replace("*", "."),  # need '.' for regex match-all
+            str(full_safe_list),
+        ],
+        text=True,
+        check=True,
+        stdout=subprocess.PIPE,
+    )
+    return out.stdout.splitlines()
+
+
+def _get_objects(
+    zip_filenames: list[str],
+    bucket: str,
+    s3_folder: str,
+    out_dir: Path,
+    max_workers: int = 3,
+) -> list[Path]:
+    from itertools import repeat
+
+    def _download(s3_filename) -> Path | None:
+        s3_client, filename = s3_filename
+        output_file = out_dir / filename
+        key = f"{s3_folder}/{filename}"
+        try:
+            s3_client.download_file(Bucket=bucket, Key=key, Filename=output_file)
+        except Exception as e:
+            logger.error(f"Failed to download s3://{bucket}/{key}", exc_info=True)
+            return None
+        return output_file
+
+    s3 = boto3.client("s3")
+    outs = thread_map(_download, zip(repeat(s3), zip_filenames), max_workers=max_workers)
+    return [f for f in outs if f is not None]
 
 
 def make_all_safe_metadata(
@@ -831,6 +894,24 @@ def make_all_safe_metadata(
         if out is not None:
             csv_files.append(out)
     return csv_files
+
+
+def _combine_csvs_by_date(
+    csv_files: list[Path],
+    date: datetime.datetime,
+    out_dir: Path,
+    no_clean: bool = False,
+):
+    date_output = out_dir / f"{date.strftime('%Y%m%d')}.csv"
+    logger.info("Combining CSVs into %s", date_output)
+    all_rows = []
+    for csv in csv_files:
+        # all_rows.extend(pd.read_csv(csv, header=None).values.tolist())
+        rows = csv.read_text().splitlines()
+        all_rows.extend([row.split(",") for row in rows])
+        if not no_clean:
+            csv.unlink()
+    _to_csv(all_rows, date_output)
 
 
 def main() -> None:
@@ -890,6 +971,17 @@ def main() -> None:
         action="store_true",
         help="Don't clean up SAFE files after processing.",
     )
+    parser.add_argument(
+        "--combine-by-date",
+        action="store_true",
+        help=(
+            "Concatenate separate SAFE csvs into one per date. "
+            "Saves file named YYYYMMDD.csv"
+        ),
+    )
+    parser.add_argument(
+        "--no-upload", action="store_true", help="Don't upload the final CSVs to S3"
+    )
 
     args = parser.parse_args()
 
@@ -947,18 +1039,13 @@ def main() -> None:
             max_workers=args.max_workers,
         )
 
-        # # Combine all the CSVs into one per date
-        # logger.info("Combining CSVs")
-        # all_rows = []
-        # for csv in csv_files:
-        #     # all_rows.extend(pd.read_csv(csv, header=None).values.tolist())
-        #     rows = csv.read_text().splitlines()
-        #     all_rows.extend([row.split(",") for row in rows])
-        #     if not args.no_clean:
-        #         csv.unlink()
-        #
-        # date_output = out_dir / f"{date.strftime('%Y%m%d')}.csv"
-        # _to_csv(all_rows, date_output)
+        # Combine all the CSVs into one per date
+        if args.combine_by_date:
+            _combine_csvs_by_date(csv_files, date, out_dir, no_clean=args.no_clean)
+
+        if args.no_upload:
+            logger.info("Skipping upload to S3.")
+            return
 
         logger.info(f"Uploading {len(csv_files)} to S3")
         for file in csv_files:
