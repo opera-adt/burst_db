@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import ClassVar
 
 import boto3
+from botocore.exceptions import ClientError
 from botocore.config import Config
 import lxml.etree as ET
 import numpy as np
@@ -47,6 +48,9 @@ T_ORBIT = (12 * 86400.0) / 175.0
 PADDING_SHORT = 60
 
 T_ORBIT = (12 * 86400.0) / 175.0
+
+# Use semicolon for output CSVs due to WKT commas
+DELIMITER = ";"
 
 
 @dataclass(frozen=True)
@@ -289,7 +293,7 @@ def _bursts_from_xml(annotation_path: str, orbit_path: str, open_method=open):
     if orbit_path:
         orbit_state_vector_list = get_osv_list_from_orbit(orbit_path)
 
-        # Calculate ascending node crossing time from orbit;
+        # Calculate ascending node crossing time from orbit,
         # compare with the info from annotation
         try:
             ascending_node_time_orbit = get_ascending_node_time_orbit(
@@ -529,7 +533,7 @@ def get_ascending_node_time_orbit(
     # detect the ascending node crossing
     iterator_z_time = zip(orbit_z_vec, orbit_z_vec[1:], orbit_time_vec)
     for index_z, (z_prev, z, _) in enumerate(iterator_z_time):
-        # Check if ascending node crossing has taken place;
+        # Check if ascending node crossing has taken place:
         if not z_prev < 0 <= z:
             continue
 
@@ -748,7 +752,7 @@ def _to_csv(row_list: list, outfile: str | Path):
 
     logger.debug(f"Writing {len(row_list)} rows to {outfile}")
     with open(outfile, "w") as f:
-        writer = csv.writer(f, delimiter=";")
+        writer = csv.writer(f, delimiter=DELIMITER)
         writer.writerows(row_list)
 
 
@@ -859,13 +863,24 @@ def _get_objects(
         key = f"{s3_folder}/{filename}"
         try:
             s3_client.download_file(Bucket=bucket, Key=key, Filename=output_file)
-        except Exception as e:
+        except ClientError as e:
+            if "Not Found" in str(e):
+                logger.error(f"s3://{bucket}/{key} doesn't exist")
+            else:
+                logger.error(f"Failed to download s3://{bucket}/{key}", exc_info=True)
+            return None
+        except Exception:
             logger.error(f"Failed to download s3://{bucket}/{key}", exc_info=True)
             return None
         return output_file
 
     s3 = boto3.client("s3")
-    outs = thread_map(_download, zip(repeat(s3), zip_filenames), max_workers=max_workers)
+    outs = thread_map(
+        _download,
+        zip(repeat(s3), zip_filenames),
+        max_workers=max_workers,
+        total=len(zip_filenames),
+    )
     return [f for f in outs if f is not None]
 
 
@@ -901,22 +916,65 @@ def _combine_csvs_by_date(
     date: datetime.datetime,
     out_dir: Path,
     no_clean: bool = False,
-):
+) -> Path:
     date_output = out_dir / f"{date.strftime('%Y%m%d')}.csv"
     logger.info("Combining CSVs into %s", date_output)
-    all_rows = []
-    for csv in csv_files:
-        # all_rows.extend(pd.read_csv(csv, header=None).values.tolist())
-        rows = csv.read_text().splitlines()
-        all_rows.extend([row.split(",") for row in rows])
-        if not no_clean:
-            csv.unlink()
-    _to_csv(all_rows, date_output)
+    # Read each of the files in `csv_files` and simply concatenate them to
+    # a single file in `date_output`
+    # Open the output file in write mode
+    with open(date_output, "w") as outfile:
+        # Loop over each text file and write its contents to the output file
+        for p in csv_files:
+            with open(p, "r") as infile:
+                outfile.write(infile.read())
+            if not no_clean:
+                logger.debug("Removing CSVs")
+                p.unlink()
+
+    return date_output
 
 
-def main() -> None:
-    """Download Sentinel-1 metadata from a WKT file."""
+def _is_valid_date(date: datetime.datetime, satellite: str) -> bool:
+    # max_date = datetime.datetime.today()
+    max_date = datetime.datetime(2023, 8, 1)
+    # https://cmr.earthdata.nasa.gov/cloudstac/ASF/collections/SENTINEL-1A_SLC.v1/2014/10
+    s1a_start_date = datetime.datetime(2014, 10, 3)
+    # https://cmr.earthdata.nasa.gov/cloudstac/ASF/collections/SENTINEL-1B_SLC.v1/2016/08
+    s1b_start_date = datetime.datetime(2016, 8, 20)
+    # https://cmr.earthdata.nasa.gov/cloudstac/ASF/collections/SENTINEL-1B_SLC.v1/2021/12
+    s1b_end_date = datetime.datetime(2023, 12, 23)
+    if date > max_date:
+        logger.info(f"Skipping {date} since it is past {max_date = }")
+        return False
+    if satellite == "A":
+        if date < s1a_start_date:
+            logger.info(f"Skipping {date} since it is before {s1a_start_date = }")
+            return False
+    else:
+        if date < s1b_start_date:
+            logger.info(f"Skipping {date} since it is before {s1b_start_date = }")
+            return False
+        if date > s1b_end_date:
+            logger.info(f"Skipping {date} since it is after {s1b_end_date = }")
+            return False
+    return True
 
+
+def _get_s3_key(
+    file_to_upload, out_folder, satellite, date, combine_by_date=True
+) -> str:
+    if combine_by_date:
+        # Only nest by year
+        year = date.strftime("%Y")
+        key = f"{out_folder}/S1{satellite}/{year}/{file_to_upload.name}"
+    else:
+        # title by satellite / date
+        year_month = date.strftime("%Y/%m")
+        key = f"{out_folder}/S1{satellite}/{year_month}/{file_to_upload.name}"
+    return key
+
+
+def _get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Download S1 metadata from a list of SAFE granule names.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -980,9 +1038,28 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--full-safe-list",
+        type=Path,
+        help=(
+            "Path to a text file containing the full list of SAFE granules. "
+            "If provided, will use this to search for SAFE files instead of "
+            "using `s5cmd` (and is much faster)."
+        ),
+    )
+    parser.add_argument(
+        "--skip-if-exists",
+        action="store_true",
+        help="Don't reprocess the YYYYMMDD.csv file if it's on S3 already.",
+    )
+    parser.add_argument(
         "--no-upload", action="store_true", help="Don't upload the final CSVs to S3"
     )
+    return parser
 
+
+def main() -> None:
+    """Download Sentinel-1 metadata from a WKT file."""
+    parser = _get_parser()
     args = parser.parse_args()
 
     # Create the output directory
@@ -993,17 +1070,43 @@ def main() -> None:
     start_date = args.start_date
     end_date = args.end_date
     # date_range = pd.date_range(start_date, end_date)
-    date_range = []
     date = start_date
-    while date <= end_date:
-        date_range.append(date)
+    date_range = [date]
+    while date < end_date:
         date += datetime.timedelta(days=1)
+        date_range.append(date)
 
     config = Config(retries={"max_attempts": 10, "mode": "standard"})
     s3 = boto3.client("s3", config=config)
 
+    # TEMP: remove later. unzip the file if it exists
+    if not args.full_safe_list and Path("all_cmr_stac_safes_sorted.txt.zip").exists():
+        subprocess.run(["unzip", "all_cmr_stac_safes_sorted.txt.zip"])
+        args.full_safe_list = Path("all_cmr_stac_safes_sorted.txt")
+
     # For each date, download the SAFE files
     for date in date_range:
+        if not _is_valid_date(date, args.satellite):
+            continue
+
+        # Check for the current date key, skip if it exists
+        if args.combine_by_date and args.skip_if_exists:
+            key = _get_s3_key(
+                Path(f"{date.strftime('%Y%m%d')}.csv.zip"),
+                args.out_folder,
+                args.satellite,
+                date,
+                combine_by_date=args.combine_by_date,
+            )
+            try:
+                s3.head_object(Bucket=args.bucket, Key=key)
+                logger.info(f"Skipping {date}, {key} already exists")
+                continue
+            except ClientError as e:
+                if e.response["Error"]["Message"] != "Not Found":
+                    raise
+                # Otherwise, continue. Expected error is 404 not found
+
         logger.info(
             f"Pulling SAFE folder for {date}, S1{args.satellite},"
             f" S{args.single_or_double}V pol"
@@ -1015,6 +1118,7 @@ def main() -> None:
             out_dir=out_dir,
             satellite=args.satellite,
             single_or_double=args.single_or_double,
+            full_safe_list=args.full_safe_list,
         )
         logger.info(
             f"Found {len(safes)} SAFE files for {date}, S1{args.satellite},"
@@ -1041,7 +1145,11 @@ def main() -> None:
 
         # Combine all the CSVs into one per date
         if args.combine_by_date:
-            _combine_csvs_by_date(csv_files, date, out_dir, no_clean=args.no_clean)
+            out = _combine_csvs_by_date(
+                csv_files, date, out_dir, no_clean=args.no_clean
+            )
+            # We only need to upload the combined CSV
+            csv_files = [out]
 
         if args.no_upload:
             logger.info("Skipping upload to S3.")
@@ -1057,9 +1165,7 @@ def main() -> None:
                 z.write(file, arcname=file.name)
             file.unlink()
 
-            # title by satellite / date
-            year_month = date.strftime("%Y/%m")
-            key = f"{args.out_folder}/S1{args.satellite}/{year_month}/{file_to_upload.name}"
+            key = _get_s3_key(file_to_upload, args.out_folder, args.satellite, date)
             logger.info(f"Uploading {key} to S3")
             s3.upload_file(str(file_to_upload), args.bucket, key)
 
