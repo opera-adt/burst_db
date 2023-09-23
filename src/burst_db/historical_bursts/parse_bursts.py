@@ -842,9 +842,15 @@ def _find_matching(search_term: str, full_safe_list: str | Path) -> list[str]:
             str(full_safe_list),
         ],
         text=True,
-        check=True,
         stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
+    if out.returncode == 1:
+        logger.error(f"Failed to grep {search_term}")
+        return []
+    elif out.returncode > 1:
+        logger.error(f"Failed to grep {search_term}: {out.stderr}")
+        out.check_returncode()
     return out.stdout.splitlines()
 
 
