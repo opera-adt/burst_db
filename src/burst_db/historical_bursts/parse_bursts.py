@@ -942,7 +942,7 @@ def _is_valid_date(date: datetime.datetime, satellite: str) -> bool:
     # https://cmr.earthdata.nasa.gov/cloudstac/ASF/collections/SENTINEL-1B_SLC.v1/2016/08
     s1b_start_date = datetime.datetime(2016, 8, 20)
     # https://cmr.earthdata.nasa.gov/cloudstac/ASF/collections/SENTINEL-1B_SLC.v1/2021/12
-    s1b_end_date = datetime.datetime(2023, 12, 23)
+    s1b_end_date = datetime.datetime(2021, 12, 23)
     if date > max_date:
         logger.info(f"Skipping {date} since it is past {max_date = }")
         return False
@@ -1166,7 +1166,7 @@ def main() -> None:
             file.unlink()
 
             key = _get_s3_key(file_to_upload, args.out_folder, args.satellite, date)
-            logger.info(f"Uploading {key} to S3")
+            logger.info(f"Uploading {key} to s3://{args.bucket}")
             s3.upload_file(str(file_to_upload), args.bucket, key)
 
         if not args.no_clean:
