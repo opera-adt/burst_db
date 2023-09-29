@@ -32,7 +32,7 @@ setup(
     # Add console scripts here
     entry_points={
         "console_scripts": [
-            "opera-create-db = burst_db.build_frame_db:main",
+            "opera-frames = burst_db.cli:app",
         ],
     },
 )

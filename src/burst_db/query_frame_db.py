@@ -10,7 +10,6 @@ import typer
 from typing_extensions import Annotated
 
 DEFAULT_DB = Path("~/dev/opera-s1-disp.gpkg").expanduser()
-app = typer.Typer()
 
 
 def query_database(frame_id: int, db_path: Path) -> dict:
@@ -62,7 +61,6 @@ def build_wkt_from_bbox(xmin: float, ymin: float, xmax: float, ymax: float) -> s
     return box(xmin, ymin, xmax, ymax).wkt
 
 
-@app.command()
 def intersect(
     db_path: Path = DEFAULT_DB,
     bbox: Optional[tuple[float, float, float, float]] = typer.Option(
@@ -102,7 +100,6 @@ def intersect(
     print(df_intersecting_frames)
 
 
-@app.command()
 def lookup(
     frame_id: int,
     db_path: Annotated[
@@ -110,12 +107,6 @@ def lookup(
     ] = DEFAULT_DB,
     # db_path: Path = DEFAULT_DB,
 ):
-    """
-    Query the geopackage database and return the result as JSON based on the provided frame ID.
-    """
+    """Query the geopackage database and return the result as JSON based on the provided frame ID."""
     result = query_database(frame_id, db_path)
     typer.echo(json.dumps(result, indent=4))
-
-
-if __name__ == "__main__":
-    app()
