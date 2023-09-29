@@ -11,6 +11,9 @@ from typing_extensions import Annotated
 
 DEFAULT_DB = Path("~/dev/opera-s1-disp.gpkg").expanduser()
 
+Bbox = tuple[float, float, float, float]
+MaybeBbox = Optional[Bbox]
+
 
 def query_database(frame_id: int, db_path: Path) -> dict:
     """
@@ -63,41 +66,71 @@ def build_wkt_from_bbox(xmin: float, ymin: float, xmax: float, ymax: float) -> s
 
 def intersect(
     db_path: Path = DEFAULT_DB,
-    bbox: Optional[tuple[float, float, float, float]] = typer.Option(
-        None,
-        "--bbox",
-        metavar="LEFT BOTTOM RIGHT TOP",
-        help="Bounding box in format 'xmin,ymin,xmax,ymax'.",
-    ),
-    wkt: Optional[str] = typer.Option(
-        None, "--wkt", help="Well-Known Text (WKT) representation of geometry."
-    ),
+    bbox: Annotated[
+        MaybeBbox,
+        typer.Option(
+            "--bbox",
+            metavar="LEFT BOTTOM RIGHT TOP",
+            help="Lon/lat bounding box of area of interest.",
+        ),
+    ] = None,
+    wkt: Annotated[
+        Optional[str],
+        typer.Option("--wkt", help="Well-Known Text (WKT) representation of geometry."),
+    ] = None,
 ):
     """Query for frames intersecting a given bounding box or WKT geometry."""
-
-    if not (bool(bbox) ^ bool(wkt)):
+    if bbox is None and wkt is None:
         raise typer.BadParameter(
             "Please provide either --bbox or --wkt option, not both or neither."
         )
+    wkt_str = build_wkt_from_bbox(*bbox) if bbox is not None else wkt
 
-    if bbox:
-        wkt_str = build_wkt_from_bbox(*bbox)
-    else:
-        wkt_str = wkt
-
+    # Doing this query is slow, doesn't use the spatial index
+    # query = """
+    # SELECT *
+    # FROM burst_id_map
+    # WHERE Intersects(PolygonFromText(?, 4326), GeomFromGPB(geom))
+    # """
+    # For use of RTree:
+    # https://erouault.blogspot.com/2017/03/dealing-with-huge-vector-geopackage.html
+    # Also, need the `GeomFromGPB` to convert geopackage blob to spatialite formate
+    # http://www.gaia-gis.it/gaia-sins/spatialite-sql-4.2.0.html
     query = """
-    SELECT OGC_FID, burst_id_jpl, epsg, relative_orbit_number, orbit_pass, time_from_anx_sec, ASText(geom) AS wkt
-    FROM burst_id_map
-    WHERE Intersects(PolygonFromText(?, 4326), geom)
-    """
-    typer.echo((query, wkt_str))
+WITH given_geom AS (
+    SELECT PolygonFromText(?, 4326) as g
+),
+BBox AS (
+    SELECT
+        MbrMinX(g) AS minx,
+        MbrMaxX(g) AS maxx,
+        MbrMinY(g) AS miny,
+        MbrMaxY(g) AS maxy
+    FROM given_geom
+)
+
+SELECT fid as frame_id, epsg, relative_orbit_number, orbit_pass, 
+       is_land, is_north_america, ASText(GeomFromGPB(geom)) AS wkt
+FROM frames
+WHERE fid IN (
+    SELECT id
+    FROM rtree_frames_geom
+    JOIN BBox ON
+        rtree_frames_geom.minx <= BBox.maxx AND
+        rtree_frames_geom.maxx >= BBox.minx AND
+        rtree_frames_geom.miny <= BBox.maxy AND
+        rtree_frames_geom.maxy >= BBox.miny
+)
+AND Intersects((SELECT g FROM given_geom), GeomFromGPB(geom));
+"""
 
     with sqlite3.connect(db_path) as con:
         con.enable_load_extension(True)
         con.load_extension("mod_spatialite")
         df_intersecting_frames = pd.read_sql_query(query, con, params=[wkt_str])
 
-    print(df_intersecting_frames)
+    out_dict = df_intersecting_frames.to_dict(orient="records")
+    typer.echo(json.dumps(out_dict, indent=4))
 
 
 def lookup(
@@ -110,3 +143,7 @@ def lookup(
     """Query the geopackage database and return the result as JSON based on the provided frame ID."""
     result = query_database(frame_id, db_path)
     typer.echo(json.dumps(result, indent=4))
+
+
+if __name__ == "__main__":
+    typer.run(intersect)
