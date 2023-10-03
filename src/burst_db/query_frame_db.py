@@ -2,11 +2,11 @@
 import json
 import sqlite3
 from pathlib import Path
-
 from typing import Optional
-from shapely import geometry, box
+
 import pandas as pd
 import typer
+from shapely import box
 from typing_extensions import Annotated
 
 DEFAULT_DB = Path("~/dev/opera-s1-disp.gpkg").expanduser()
