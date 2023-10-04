@@ -10,10 +10,12 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import typer
 import utm  # https://github.com/Turbo87/utm
 from shapely import GeometryType, STRtree
 from shapely.affinity import translate
 from tqdm.auto import tqdm
+from typing_extensions import Annotated
 
 from burst_db import __version__
 
@@ -537,22 +539,24 @@ def _get_burst_to_frame_list(df_frame_to_burst_id):
     )
 
 
-def _get_metadata(args):
+def _get_metadata(
+    margin, snap, target_frame, land_buffer_deg, optimize_land, min_frame, max_frame
+):
     base = {
-        "margin": args.margin,
-        "snap": args.snap,
-        "target_frame_size": args.target_frame,
+        "margin": margin,
+        "snap": snap,
+        "target_frame_size": target_frame,
         "version": __version__,
         "last_modified": datetime.datetime.now().isoformat(),
-        "land_buffer_deg": args.land_buffer_deg,
-        "land_optimized": args.optimize_land,
+        "land_buffer_deg": land_buffer_deg,
+        "land_optimized": optimize_land,
         "usgs_land_shape_url": USGS_LAND_URL,
         "greenland_shape_url": GREENLAND_URL,
         "esa_burst_db_url": ESA_DB_URL,
     }
-    if args.optimize_land:
-        base["min_frame_size"] = args.min_frame
-        base["max_frame_size"] = args.max_frame
+    if optimize_land:
+        base["min_frame_size"] = min_frame
+        base["max_frame_size"] = max_frame
     return base
 
 
@@ -569,86 +573,68 @@ def read_zipped_json(filename):
         return json.loads(bytes.decode())
 
 
-def get_cli_args():
-    parser = argparse.ArgumentParser(
-        description="Generate frames for Sentinel-1 data",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument(
-        "--esa-db-path",
-        default="burst_map_IW_000001_375887.sqlite3",
-        help=(
-            "Path to the ESA sqlite burst database to convert, "
-            f"downloaded from {ESA_DB_URL} . Will be downloaded if not exists."
+def create(
+    esa_db_path: Annotated[
+        str,
+        typer.Option(
+            help=f"Path to the ESA sqlite burst database to convert, downloaded from {ESA_DB_URL}. Will be downloaded if not exists.",
         ),
-    )
-    parser.add_argument(
-        "--snap",
-        type=float,
-        default=30.0,
-        help="Snap the bounding box to the nearest multiple of this value.",
-    )
-    parser.add_argument(
-        "--margin",
-        type=float,
-        default=5000.0,
-        help="Add this margin surrounding the bounding box of bursts.",
-    )
-    parser.add_argument(
-        "--optimize-land",
-        action="store_true",
-        help=(
-            "Create frames which attempt to minimize the number of majority-water"
-            " frames"
+    ] = "burst_map_IW_000001_375887.sqlite3",
+    snap: Annotated[
+        float,
+        typer.Option(
+            help="Snap the bounding box to the nearest multiple of this value."
         ),
-    )
-    parser.add_argument(
-        "--target-frame",
-        type=int,
-        default=9,
-        help="Target number of bursts per frame.",
-    )
-    parser.add_argument(
-        "--min-frame",
-        type=int,
-        default=5,
-        help="(If using `--optimize-land`): Minimum number of bursts per frame",
-    )
-    parser.add_argument(
-        "--max-frame",
-        type=int,
-        default=10,
-        help="(If using `--optimize-land`): Maximum number of bursts per frame",
-    )
-    parser.add_argument(
-        "-o",
-        "--outfile",
-        default="opera-s1-disp.gpkg",
-        help="Output file name",
-    )
-    parser.add_argument(
-        "--land-buffer-deg",
-        type=float,
-        default=0.3,
-        help="A buffer (in degrees) to indicate that a frame is near land.",
-    )
-
-    return parser.parse_args()
-
-
-def main():
-    args = get_cli_args()
+    ] = 30.0,
+    margin: Annotated[
+        float,
+        typer.Option(help="Add this margin surrounding the bounding box of bursts."),
+    ] = 5000.0,
+    optimize_land: Annotated[
+        bool,
+        typer.Option(
+            help="Create frames which attempt to minimize the number of majority-water frames.",
+        ),
+    ] = False,
+    target_frame: Annotated[
+        int, typer.Option(help="Target number of bursts per frame.")
+    ] = 9,
+    min_frame: Annotated[
+        int,
+        typer.Option(
+            help="(If using `--optimize-land`): Minimum number of bursts per frame."
+        ),
+    ] = 5,
+    max_frame: Annotated[
+        int,
+        typer.Option(
+            help="(If using `--optimize-land`): Maximum number of bursts per frame."
+        ),
+    ] = 10,
+    outfile: Annotated[
+        str, typer.Option(help="Output file name")
+    ] = "opera-s1-disp.gpkg",
+    land_buffer_deg: Annotated[
+        float,
+        typer.Option(
+            help="A buffer (in degrees) to indicate that a frame is near land."
+        ),
+    ] = 0.3,
+):
+    """Generate the OPERA frame database for Sentinel-1 data."""
+    # Your main processing code would go here
+    # For now, just an example of using one of the arguments:
 
     t0 = time.time()
 
     # Read ESA's Burst Data
-    if not Path(args.esa_db_path).exists():
-        print(f"Downloading {ESA_DB_URL} to {args.esa_db_path}...")
-        get_esa_burst_db(args.esa_db_path)
+    if not Path(esa_db_path).exists():
+        print(f"Downloading {ESA_DB_URL} to {esa_db_path}...")
+        get_esa_burst_db(esa_db_path)
 
     print("Loading burst data...")
     sql = "SELECT * FROM burst_id_map"
-    with sqlite3.connect(args.esa_db_path) as con:
+    with sqlite3.connect(esa_db_path) as con:
         df_burst = gpd.GeoDataFrame.from_postgis(
             sql, con, geom_col="GEOMETRY", crs="EPSG:4326"
         ).rename_geometry("geom")
@@ -660,7 +646,6 @@ def main():
     df_burst.loc[:, "epsg"] = 0
 
     # Start the outfile with the ESA database contents
-    outfile = args.outfile
     print("Saving initial version of `burst_id_map` table")
     df_burst.set_index("OGC_FID").to_file(
         outfile, driver="GPKG", layer="burst_id_map", index=False
@@ -675,7 +660,7 @@ def main():
 
     # Get the land polygon to intersect
     print("Indicating which burst triplets are near land...")
-    df_land = get_land_df(args.land_buffer_deg)
+    df_land = get_land_df(land_buffer_deg)
     land_geom = df_land.geometry
 
     is_in_land = get_land_indicator(df_burst_triplet, land_geom)
@@ -685,10 +670,10 @@ def main():
     print("Defining frames - bursts JOIN table")
     df_frame_to_burst_id = frames.create_frame_to_burst_mapping(
         is_in_land,
-        target_frame=args.target_frame,
-        min_frame=args.min_frame,
-        max_frame=args.max_frame,
-        optimize_land=args.optimize_land,
+        target_frame=target_frame,
+        min_frame=min_frame,
+        max_frame=max_frame,
+        optimize_land=optimize_land,
     )
     make_frame_to_burst_table(outfile, df_frame_to_burst_id)
 
@@ -716,7 +701,7 @@ def main():
 
     # Create the bounding box in UTM coordinates
     add_gpkg_spatial_ref_sys(outfile)
-    save_utm_bounding_boxes(outfile, margin=args.margin, snap=args.snap)
+    save_utm_bounding_boxes(outfile, margin=margin, snap=snap)
 
     # Make the minimal version of the DB
     ext = Path(outfile).suffix
@@ -730,7 +715,9 @@ def main():
     )
 
     # Get metadata for output dbs
-    metadata = _get_metadata(args)
+    metadata = _get_metadata(
+        margin, snap, target_frame, land_buffer_deg, optimize_land, min_frame, max_frame
+    )
     # Create the two JSON mappings:
     # from frame id -> [burst Ids]
     # and burst id -> [frame Ids]
@@ -748,7 +735,3 @@ def main():
     create_metadata_table(out_minimal, metadata=metadata)
 
     print(f"Total time: {time.time() - t0:.2f} seconds")
-
-
-if __name__ == "__main__":
-    main()
