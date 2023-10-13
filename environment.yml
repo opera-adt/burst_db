@@ -1,13 +1,14 @@
 channels:
 - conda-forge
 dependencies:
-- python >= 3.8
+- python >= 3.9
 - geopandas
 - numpy
 - pandas
 - pip
 - shapely
 - tqdm
+- typer
 - utm
 - pip:
   - unzip_http
