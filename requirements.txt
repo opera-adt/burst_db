@@ -1,0 +1,9 @@
+geopandas
+numpy
+pandas
+pip
+shapely
+tqdm
+typer
+unzip_http
+utm
