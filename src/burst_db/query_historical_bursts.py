@@ -1,14 +1,20 @@
+from __future__ import annotations
+
 import csv
 import sqlite3
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from functools import partial
 from pathlib import Path
-from typing import Callable, Optional, Sequence
+from typing import Any, Callable, Optional, Sequence
 
 import typer
-from disp_s1.utils import FRAME_TO_BURST_JSON_FILE, read_zipped_json
 
+from burst_db.utils import read_zipped_json
+
+FRAME_TO_BURST_JSON_FILE = Path(
+    "/home/staniewi/dev/opera-s1-disp-frame-to-burst.json.zip"
+)
 DB_PATH = Path("/home/staniewi/dev/coverage-map-s1/global/testing_all_bursts.gpkg")
 
 
@@ -20,17 +26,20 @@ def _fetch_base(
     max_datetime: Optional[datetime] = None,
     output_file: Optional[typer.FileTextWrite] = None,
     db_path: Path = DB_PATH,
+    frame_to_burst_json_file: Path = FRAME_TO_BURST_JSON_FILE,
     headers: bool = True,
     debug: bool = False,
-) -> list[str]:
+) -> list[Any]:
     # Step 1: Parse zipped JSON to get the burst_ids for the given frame_ids
-    data = read_zipped_json(FRAME_TO_BURST_JSON_FILE)["data"]
+    data = read_zipped_json(frame_to_burst_json_file)["data"]
     burst_ids = []
     for frame_id in frame_ids:
         burst_ids.extend(data.get(f"{int(frame_id)}", {}).get("burst_ids", []))
 
     # Step 2: De-duplicate the burst_ids
     unique_burst_ids = list(set(burst_ids))
+
+    out = []
 
     # Step 3: Connect to the SQLite database and get the relevant granules
     with sqlite3.connect(db_path) as conn:
@@ -54,8 +63,10 @@ def _fetch_base(
         if headers:
             writer.writerow([c.replace("DISTINCT ", "") for c in select_columns])
         for row in results:
-            granule = row_processor(row)
-            writer.writerow([granule])
+            out_row = row_processor(row)
+            writer.writerow([out_row])
+            out.append(out_row)
+    return out
 
 
 def fetch_granules(
@@ -64,9 +75,10 @@ def fetch_granules(
     max_datetime: Optional[datetime] = None,
     output_file: Optional[typer.FileTextWrite] = None,
     db_path: Path = DB_PATH,
+    frame_to_burst_json_file: Path = FRAME_TO_BURST_JSON_FILE,
     headers: bool = False,
     debug: bool = False,
-) -> list[str]:
+) -> list[Any]:
     def row_processor(row):
         return row[0].replace(".SAFE", "")
 
@@ -78,6 +90,7 @@ def fetch_granules(
         output_file=output_file,
         select_columns=["DISTINCT granule"],
         db_path=db_path,
+        frame_to_burst_json_file=frame_to_burst_json_file,
         headers=headers,
         debug=debug,
     )
@@ -89,10 +102,11 @@ def fetch_bursts(
     max_datetime: Optional[datetime] = None,
     output_file: Optional[typer.FileTextWrite] = None,
     db_path: Path = DB_PATH,
+    frame_to_burst_json_file: Path = FRAME_TO_BURST_JSON_FILE,
     headers: bool = False,
     with_granule: bool = False,
     debug: bool = False,
-) -> list[str]:
+) -> list[Any]:
     """Get all (burst_id_jpl, sensing_time) for a list of frame ids."""
     select_columns = ["burst_id_jpl", "sensing_time"]
     if with_granule:
@@ -105,13 +119,14 @@ def fetch_bursts(
         output_file=output_file,
         select_columns=select_columns,
         db_path=db_path,
+        frame_to_burst_json_file=frame_to_burst_json_file,
         headers=headers,
         debug=debug,
     )
 
 
 def _get_query(
-    unique_burst_ids: list[str],
+    unique_burst_ids: Sequence[str],
     select_columns: Sequence[str],
     min_datetime: Optional[datetime] = None,
     max_datetime: Optional[datetime] = None,
@@ -123,7 +138,7 @@ def _get_query(
     WHERE bursts.burst_id_jpl IN ({', '.join(['?']*len(unique_burst_ids))})"""
 
     query = f"SELECT {','.join(select_columns)}" + query_base
-    args = unique_burst_ids
+    args: list[str | date] = list(unique_burst_ids)
     if min_datetime:
         query += "\nAND sensing_time >= ?"
         args += [min_datetime.date()]
