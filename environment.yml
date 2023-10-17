@@ -11,4 +11,4 @@ dependencies:
 - typer
 - utm
 - pip:
-  - unzip_http
+  - unzip-http
