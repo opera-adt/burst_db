@@ -5,5 +5,5 @@ pip
 shapely
 tqdm
 typer
-unzip_http
+unzip-http
 utm
