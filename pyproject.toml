@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=64.0", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "burst_db"
+authors = [
+  { name = "Seongsu Jeong", email = "seongsu.jeong@jpl.nasa.gov" },
+  { name = "Scott Staniewicz", email = "scott.j.staniewicz@jpl.nasa.gov" },
+]
+description = "Sentinel-1 Burst and Frame database for OPERA"
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.9"
+
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+]
+license = { file = "LICENSE.txt" }
+
+# The version will be written into a version.py upon install, auto-generated
+# see section: setuptools_scm
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#dynamic-metadata
+# dependencies will be read from text files
+dynamic = ["version", "dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/opera-adt/burst_db"
+"Bug Tracker" = "https://github.com/opera-adt/burst_db/issues"
+
+# Entry points for the command line interface
+[project.scripts]
+opera-frames = "burst_db.cli:app"
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools_scm]
+# https://github.com/pypa/setuptools_scm#configuration-parameters
+write_to = "src/burst_db/_version.py"
+# https://github.com/pypa/setuptools_scm#version-number-construction
+version_scheme = "no-guess-dev" # Will not guess the next version
+
+
+[tool.black]
+target-version = ["py39", "py310", "py311"]
+preview = true
+
+[tool.isort]
+profile = "black"
+known_first_party = ["burst_db"]
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+
+
+# [tool.pydocstyle]
+# ignore = "D100,D102,D104,D105,D106,D107,D203,D204,D213,D413"
+
+[tool.pytest.ini_options]
+doctest_optionflags = "NORMALIZE_WHITESPACE NUMBER"
+addopts = " -n auto --maxprocesses=8 --doctest-modules --randomly-seed=1234 --ignore=scripts --ignore=docs --ignore=data"
+filterwarnings = ["error"]

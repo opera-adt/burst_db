@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import argparse
 import datetime
 import json
 import sqlite3
@@ -134,8 +133,7 @@ def make_frame_table(outfile: str):
         )
 
         # Aggregates burst geometries for each frame into one
-        con.execute(
-            """INSERT INTO frames(fid, is_land, geom)
+        con.execute("""INSERT INTO frames(fid, is_land, geom)
             SELECT fb.frame_fid as fid,
                     fb.is_land,
                     ST_UnaryUnion(ST_Collect(geom)) as geom
@@ -144,8 +142,7 @@ def make_frame_table(outfile: str):
                 frames_bursts fb
                 ON b.ogc_fid = fb.burst_ogc_fid
             GROUP BY 1;
-        """
-        )
+        """)
         print("Creating indexes and spatial index...")
         con.execute("CREATE INDEX IF NOT EXISTS idx_frames_fid ON frames (fid)")
         con.execute("SELECT gpkgAddSpatialIndex('frames', 'geom') ;")
@@ -155,10 +152,10 @@ def make_frame_table(outfile: str):
         )
         # Set the relative_orbit_number as the most common value for each frame
         con.execute("ALTER TABLE frames ADD COLUMN relative_orbit_number INTEGER;")
-        con.execute(
-            """WITH frame_tracks AS (
+        con.execute("""WITH frame_tracks AS (
                 SELECT f.fid,
-                    CAST(ROUND(AVG(b.relative_orbit_number)) AS INTEGER) AS relative_orbit_number
+                    CAST(ROUND(AVG(b.relative_orbit_number))
+                         AS INTEGER) AS relative_orbit_number
                 FROM frames f
                 JOIN frames_bursts fb ON f.fid = fb.frame_fid
                 JOIN burst_id_map b ON fb.burst_ogc_fid = b.ogc_fid
@@ -166,12 +163,10 @@ def make_frame_table(outfile: str):
             ) UPDATE frames SET relative_orbit_number = frame_tracks.relative_orbit_number
             FROM frame_tracks
             WHERE frames.fid = frame_tracks.fid;
-            """
-        )
+            """)
         # Set the orbit_pass as the value from the first burst
         con.execute("ALTER TABLE frames ADD COLUMN orbit_pass TEXT;")
-        con.execute(
-            """WITH op AS
+        con.execute("""WITH op AS
                 (SELECT f.fid,
                         b.orbit_pass
                 FROM frames f
@@ -185,8 +180,7 @@ def make_frame_table(outfile: str):
             UPDATE frames SET orbit_pass = frame_orbits.orbit_pass
             FROM frame_orbits
             WHERE frames.fid = frame_orbits.fid;
-            """
-        )
+            """)
 
         # Drop the is_land from the frames_bursts table
         con.execute("ALTER TABLE frames_bursts DROP COLUMN is_land;")
@@ -366,7 +360,7 @@ def add_gpkg_spatial_ref_sys(outfile):
                     32760,
 'PROJCS["WGS 84 / UTM zone 60S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",177],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","32760"]]'
                 );
-        """
+        """  # noqa
         try:
             con.execute(sql)
         except (sqlite3.OperationalError, sqlite3.IntegrityError):
@@ -445,10 +439,8 @@ def make_minimal_db(db_path, df_frame_to_burst_id, output_path):
     """
     with sqlite3.connect(db_path) as con:
         df = pd.read_sql_query(
-            (
-                "SELECT OGC_FID, burst_id_jpl, epsg, xmin, ymin, xmax, ymax FROM"
-                " burst_id_map"
-            ),
+            "SELECT OGC_FID, burst_id_jpl, epsg, xmin, ymin, xmax, ymax FROM"
+            " burst_id_map",
             con,
         )
     # Make sure snapped coordinates as integers (~40% smaller than REAL)
@@ -577,7 +569,10 @@ def create(
     esa_db_path: Annotated[
         str,
         typer.Option(
-            help=f"Path to the ESA sqlite burst database to convert, downloaded from {ESA_DB_URL}. Will be downloaded if not exists.",
+            help=(
+                "Path to the ESA sqlite burst database to convert, downloaded from"
+                f" {ESA_DB_URL}. Will be downloaded if not exists."
+            ),
         ),
     ] = "burst_map_IW_000001_375887.sqlite3",
     snap: Annotated[
@@ -593,7 +588,10 @@ def create(
     optimize_land: Annotated[
         bool,
         typer.Option(
-            help="Create frames which attempt to minimize the number of majority-water frames.",
+            help=(
+                "Create frames which attempt to minimize the number of majority-water"
+                " frames."
+            ),
         ),
     ] = False,
     target_frame: Annotated[

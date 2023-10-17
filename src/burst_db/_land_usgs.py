@@ -29,7 +29,7 @@ def get_usgs_land(outpath=None):
         if not any(fnmatch.fnmatch(fn.filename, g) for g in paths):
             continue
         outname = outpath / fn.filename
-        if outname.suffix == (".shp"):
+        if outname.suffix == ".shp":
             shp_files.append(outname)
         if not outname.exists():
             outname.parent.mkdir(parents=True, exist_ok=True)

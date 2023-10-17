@@ -1,0 +1,24 @@
+# mamba create -n aws-batch python=3.11 prefect s1reader pip s3fs earthaccess rich shapely
+name: burst-db-env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip>=21.3  # https://pip.pypa.io/en/stable/reference/build-system/pyproject-toml/#editable-installation
+  - lxml
+  - awscli
+  - backoff
+  - boto3
+  - earthaccess
+  # - s1reader
+  - shapely>=1.8
+  - requests
+  - s3fs
+  - s5cmd
+  - scipy
+  - sentineleof
+  - tqdm
+  # - pip:
+  #   - https://github.com/scottstanie/asfsmd/archive/s3fs-client.zip  # My branch with changes
+
+
