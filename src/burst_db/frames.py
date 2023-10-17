@@ -151,7 +151,7 @@ def solve(n, target=TARGET_FRAME, max_frame=MAX_FRAME, min_frame=MIN_FRAME):
     Reference
     ---------
     ..[1] https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-fall-2011/resources/mit6_006f11_lec20/
-    """
+    """  # noqa
     # DP[i][0] is the minimum badness of the frames starting at i
     # and DP[i][1] is the index of the next frame (to backtrack and get the slices)
     DP = [None] * (n + 1)
@@ -226,8 +226,8 @@ def create_frame_slices(is_land_indicator, min_frame=MIN_FRAME) -> list[FrameSli
                 indicator[ii - min_frame // 2 : ii + min_frame // 2 + 1] = True
             # loop will break when we didn't adjust any water sequences
 
-    consecutive_land_frames = Counter()
-    consecutive_water_frames = Counter()
+    consecutive_land_frames: Counter[int] = Counter()
+    consecutive_water_frames: Counter[int] = Counter()
     frame_slices: list[FrameSlice] = []
     ii, i_prev = 0, 0
     for is_land, cur_indicators in groupby(indicator):

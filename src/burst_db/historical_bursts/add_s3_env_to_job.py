@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-import os
-import earthaccess
-import re
-import json
 import argparse
+import json
+import os
+
+import earthaccess
 
 
 def convert_to_aws_json_array(env_var_dict):
@@ -13,7 +13,6 @@ def convert_to_aws_json_array(env_var_dict):
 
 
 def get_aws_credentials():
-
     try:
         cmr_token = os.environ["CMR_TOKEN"]
         auth_object = earthaccess.Auth()

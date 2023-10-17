@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "burst_db"
 authors = [
-    {name = "Seongsu Jeong", email = "seongsu.jeong@jpl.nasa.gov"},
-    {name = "Scott Staniewicz", email = "scott.j.staniewicz@jpl.nasa.gov"}
+  { name = "Seongsu Jeong", email = "seongsu.jeong@jpl.nasa.gov" },
+  { name = "Scott Staniewicz", email = "scott.j.staniewicz@jpl.nasa.gov" },
 ]
 description = "Sentinel-1 Burst and Frame database for OPERA"
 readme = { file = "README.md", content-type = "text/markdown" }
@@ -58,12 +58,10 @@ ignore_missing_imports = true
 plugins = ["pydantic.mypy"]
 
 
-[tool.pydocstyle]
-ignore = "D100,D102,D104,D105,D106,D107,D203,D204,D213,D413"
+# [tool.pydocstyle]
+# ignore = "D100,D102,D104,D105,D106,D107,D203,D204,D213,D413"
 
 [tool.pytest.ini_options]
 doctest_optionflags = "NORMALIZE_WHITESPACE NUMBER"
 addopts = " -n auto --maxprocesses=8 --doctest-modules --randomly-seed=1234 --ignore=scripts --ignore=docs --ignore=data"
-filterwarnings = [
-  "error",
-]
+filterwarnings = ["error"]

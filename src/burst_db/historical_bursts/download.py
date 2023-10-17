@@ -5,12 +5,13 @@ import argparse
 import logging
 import os
 import shutil
+import time
 from itertools import chain
 from pathlib import Path
-import time
 
 import boto3
 from asfsmd import download_annotations, make_patterns
+
 # from eof import products
 from tqdm.contrib.concurrent import thread_map
 
@@ -59,19 +60,18 @@ def download_safe_metadata(
             logger.error(
                 f"Error downloading data from {remaining_products}", exc_info=True
             )
-        
 
 
 # @backoff.on_exception(backoff.expo, Exception, max_tries=2)
 def _download_safe_metadata(
-    product_name: str,
+    product_names: list[str],
     pol: str = "vv",
     outdir: Path = Path("."),
 ):
     """Use `asfsmd` to get the SAFE metadata for a product."""
 
     patterns = make_patterns(pol=pol)
-    download_annotations(product_name, patterns=patterns, outdir=outdir)
+    download_annotations(product_names, patterns=patterns, outdir=outdir)
 
 
 def zip_and_upload(
@@ -99,7 +99,9 @@ def zip_and_upload(
     # Zip the safe_dirs
     # Create an S3 client
     s3 = boto3.client("s3")
-    logger.info(f"Uploading {len(safe_dirs)} safe_dirs to s3://{bucket_name}/{folder_name}")
+    logger.info(
+        f"Uploading {len(safe_dirs)} safe_dirs to s3://{bucket_name}/{folder_name}"
+    )
     for safe_dir in safe_dirs:
         zip_file = Path(
             shutil.make_archive(
@@ -117,7 +119,6 @@ def zip_and_upload(
         # date_str = acq_time.strftime("%Y/%m")
         # key = f"{folder_name}/{date_str}/{zip_file.name}"
 
-
         # Upload the zip safe_dir to S3
         s3.upload_file(Filename=zip_file, Bucket=bucket_name, Key=key)
 
@@ -129,7 +130,7 @@ def zip_and_upload(
 
 
 def _get_product_list_cmr(search_dir: str):
-    safe_lists = Path(search_dir).glob("safes-*.txt")
+    safe_lists = list(Path(search_dir).glob("safes-*.txt"))
     logger.info(f"Found {len(safe_lists)} text files of SAFE products.")
     return list(
         chain.from_iterable(path.read_text().splitlines() for path in safe_lists)
@@ -244,4 +245,6 @@ if __name__ == "__main__":
 # total_lines=$(wc -l < remaining_safes.txt)
 # lines_per_file=$((total_lines / 5))
 # split -l $lines_per_file remaining_safes.txt -d remaining_safes_part_
-# ASFSMD_CLIENT=s3fs python download.py --batch 100 --max-work 20 --bucket burst-database-scott --folder safe_folders_zipped2 --safe-list ./remaining_safes_part_04
+# ASFSMD_CLIENT=s3fs python download.py --batch 100 --max-work 20 \
+#       --bucket burst-database-scott --folder safe_folders_zipped2 \
+#       --safe-list ./remaining_safes_part_04
