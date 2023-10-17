@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 import datetime
-import json
 import sqlite3
 import time
-import zipfile
 from pathlib import Path
 
 import geopandas as gpd
@@ -22,6 +20,7 @@ from . import frames
 from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
 from ._land_usgs import GREENLAND_URL, USGS_LAND_URL, get_greenland_shape, get_land_df
 from ._opera_north_america import get_opera_na_shape
+from .utils import write_zipped_json
 
 # Threshold to use EPSG:3413, Sea Ice Polar North (https://epsg.io/3413)
 NORTH_THRESHOLD = 75
@@ -469,7 +468,7 @@ def make_burst_to_frame_json(df, output_path: str, metadata: dict):
     )
     # Format:  {'t001_000001_iw1': [1], ...}
     dict_out = {"data": data_dict, "metadata": metadata}
-    _write_zipped_json(output_path, dict_out)
+    write_zipped_json(output_path, dict_out)
 
 
 def make_frame_to_burst_json(db_path: str, output_path: str, metadata: dict):
@@ -499,15 +498,7 @@ def make_frame_to_burst_json(db_path: str, output_path: str, metadata: dict):
     data_dict = df_frame_to_burst.set_index("frame_id").to_dict(orient="index")
     dict_out = {"data": data_dict, "metadata": metadata}
 
-    _write_zipped_json(output_path, dict_out)
-
-
-def _write_zipped_json(json_path, dict_out, level: int = 6):
-    json_zip_path = str(json_path) + ".zip"
-    with zipfile.ZipFile(
-        json_zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=level
-    ) as zf:
-        zf.writestr(json_path, json.dumps(dict_out))
+    write_zipped_json(output_path, dict_out)
 
 
 def _get_burst_to_frame_list(df_frame_to_burst_id):
@@ -557,12 +548,6 @@ def create_metadata_table(db_path, metadata):
     df = pd.DataFrame([metadata])
     with sqlite3.connect(db_path) as con:
         df.to_sql("metadata", con, if_exists="replace", index=False)
-
-
-def read_zipped_json(filename):
-    with zipfile.ZipFile(filename) as zf:
-        bytes = zf.read(str(Path(filename).name).replace(".zip", ""))
-        return json.loads(bytes.decode())
 
 
 def create(

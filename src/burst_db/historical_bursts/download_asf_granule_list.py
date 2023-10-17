@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import logging
 from dataclasses import dataclass, field
-
 from pathlib import Path
 
 import backoff
@@ -16,9 +16,6 @@ import pandas as pd
 import requests
 from shapely.geometry import shape
 from tqdm.contrib.concurrent import thread_map
-
-import logging
-
 
 logger = logging.getLogger("burst_db")
 # Make a logger good for AWS logs
@@ -50,7 +47,7 @@ class StacSearch:
     ) -> list[str]:
         """Get the list of (VV, IW) SAFEs acquired on one date."""
         # sub catalog per date
-        date_list_url = "https://cmr.earthdata.nasa.gov/stac/ASF/collections/SENTINEL-1{sat}_SLC.v1/{date_str}"
+        date_list_url = "https://cmr.earthdata.nasa.gov/cloudstac/ASF/collections/SENTINEL-1{sat}_SLC.v1/{date_str}"  # noqa
 
         safe_names = []
         for sat in missions:
@@ -85,7 +82,7 @@ class StacSearch:
     @staticmethod
     def get_safe_metadata(safe_name: str) -> tuple[str, str]:
         """Get the geojson WKT and concept ID for one SAFE granule."""
-        item_url = "https://cmr.earthdata.nasa.gov/stac/ASF/collections/SENTINEL-1{sat}_SLC.v1/items/{safe_name}-SLC"
+        item_url = "https://cmr.earthdata.nasa.gov/stac/ASF/collections/SENTINEL-1{sat}_SLC.v1/items/{safe_name}-SLC"  # noqa
         # example:
         # https://cmr.earthdata.nasa.gov/stac/ASF/collections/SENTINEL-1A_SLC.v1/items/S1A_IW_SLC__1SDV_20150302T000329_20150302T000356_004845_006086_51B0-SLC
         sat = "A" if safe_name.startswith("S1A") else "B"
