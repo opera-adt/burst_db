@@ -8,9 +8,11 @@ import shutil
 import time
 from itertools import chain
 from pathlib import Path
+from typing import Optional
 
 import boto3
 from asfsmd import download_annotations, make_patterns
+from asfsmd.common import Auth
 
 # from eof import products
 from tqdm.contrib.concurrent import thread_map
@@ -35,6 +37,7 @@ def download_safe_metadata(
     product_names: list[str],
     pol: str = "vv",
     outdir: str | Path = Path("."),
+    auth: Optional[Auth] = None,
     skip_if_exists: bool = True,
     skip_errors: bool = True,
 ):
@@ -50,13 +53,17 @@ def download_safe_metadata(
 
     logger.info(f"Downloading {len(remaining_products)} products")
     try:
-        _download_safe_metadata(remaining_products, pol=pol, outdir=Path(outdir))
+        _download_safe_metadata(
+            remaining_products, pol=pol, outdir=Path(outdir), auth=auth
+        )
     except Exception:
         logger.error(f"Error downloading data from {remaining_products}")
         # Try once more
         time.sleep(20)
         try:
-            _download_safe_metadata(remaining_products, pol=pol, outdir=Path(outdir))
+            _download_safe_metadata(
+                remaining_products, pol=pol, outdir=Path(outdir), auth=auth
+            )
         except Exception as e:
             logger.error(
                 f"Error downloading data from {remaining_products}", exc_info=True
@@ -70,13 +77,13 @@ def download_safe_metadata(
 # @backoff.on_exception(backoff.expo, Exception, max_tries=2)
 def _download_safe_metadata(
     product_names: list[str],
+    auth: Optional[Auth] = None,
     pol: str = "vv",
     outdir: Path = Path("."),
 ):
     """Use `asfsmd` to get the SAFE metadata for a product."""
-
     patterns = make_patterns(pol=pol)
-    download_annotations(product_names, patterns=patterns, outdir=outdir)
+    download_annotations(product_names, patterns=patterns, outdir=outdir, auth=auth)
 
 
 def zip_and_upload(

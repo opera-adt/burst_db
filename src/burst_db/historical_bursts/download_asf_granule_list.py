@@ -55,7 +55,7 @@ class StacSearch:
                 resp.raise_for_status()
             except requests.HTTPError:
                 if verbose:
-                    print(f"Failed for {date}. Skipping.")
+                    logger.warning(f"Failed for {date}. Skipping.")
                 continue
 
             for item in resp.json()["links"]:
@@ -106,7 +106,8 @@ class StacSearch:
         def _save_save_list(date) -> Path:
             output_name = self.output_dir / f"safes-{date.strftime('%Y-%m-%d')}.txt"
             if output_name.exists() and not overwrite:
-                print(f"{output_name} exists, skipping")
+                logger.info(f"{output_name} exists, skipping")
+                return output_name
             safe_list = StacSearch.get_safes_by_date(date, missions=missions)
             with open(output_name, "a") as f:
                 f.write("\n")

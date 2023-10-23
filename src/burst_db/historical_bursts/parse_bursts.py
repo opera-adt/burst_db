@@ -173,9 +173,7 @@ class S1BurstId:
             The burst ID object containing track number + ESA's burstId number + swath ID.
         """
         track_number, esa_burst_id, subswath = burst_id_str.split("_")
-        track_number = int(track_number[1:])
-        esa_burst_id = int(esa_burst_id)
-        return cls(track_number, esa_burst_id, subswath.lower())
+        return cls(int(track_number[1:]), int(esa_burst_id), subswath.lower())
 
     def __str__(self):
         # Form the unique JPL ID by combining track/burst/swath
@@ -920,7 +918,7 @@ def make_all_safe_metadata(
 
 def _combine_csvs_by_date(
     csv_files: list[Path],
-    date: datetime.datetime,
+    date: datetime.datetime | datetime.date,
     out_dir: Path,
     no_clean: bool = False,
 ) -> Path:

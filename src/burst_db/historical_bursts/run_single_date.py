@@ -11,29 +11,38 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
+from asfsmd.cli import _get_auth
 from eof import download
 from tqdm.contrib.concurrent import thread_map
 
 from burst_db.historical_bursts import download_asf_granule_list, parse_bursts
 from burst_db.historical_bursts.download_annotations import download_safe_metadata
 
-logger = logging.getLogger("burst_db")
-# Make a logger good for AWS logs
-h = logging.StreamHandler()
-h.setFormatter(
-    logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%S%z",
+
+def _setup_log() -> logging.Logger:
+    logger = logging.getLogger("burst_db")
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    # Make a logger good for AWS logs
+    h = logging.StreamHandler()
+    h.setFormatter(
+        logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S%z",
+        )
     )
-)
-logger.addHandler(h)
-logger.setLevel(logging.INFO)
+    logger.addHandler(h)
+    logger.setLevel(logging.INFO)
+    return logger
+
+
+logger = _setup_log()
 
 
 def get_asf_list(
     query_date: datetime.date,
     out_dir: Path,
-    max_workers: int = 10,
 ) -> Path:
     """Download the list of available Sentinel-1 granules from ASF.
 
@@ -45,8 +54,6 @@ def get_asf_list(
         End date for search.
     out_dir : Path
         Output directory for the list of granules.
-    max_workers : int, optional
-        Number of workers to use for downloading the list of granules, by default 10.
 
     Returns
     -------
@@ -59,7 +66,7 @@ def get_asf_list(
     stac_search = download_asf_granule_list.StacSearch(
         start_date=query_date,
         end_date=query_date,
-        max_workers=max_workers,
+        max_workers=1,
         output_dir=out_dir,
     )
 
@@ -71,20 +78,21 @@ def get_annotations(
     products: Sequence[str | Path], out_dir: Path, batch_size: int = 50
 ):
     """Download the XML annotation files for a list of SAFE products."""
-    print(f"{len(products) = }")
+    auth = _get_auth()
+    logger.info(f"{len(products) = }")
     out_products = [Path(out_dir) / p for p in products]
 
     remaining_products = [
         p for p in products if not (out_dir / (str(p) + ".SAFE")).exists()
     ]
-    print(f"{len(remaining_products) = }")
+    logger.info(f"{len(remaining_products) = }")
     batches = [
         remaining_products[i : i + batch_size]
         for i in range(0, len(remaining_products), batch_size)
     ]
 
     def _run_download(batch):
-        download_safe_metadata(batch, outdir=out_dir, skip_errors=False)
+        download_safe_metadata(batch, outdir=out_dir, skip_errors=False, auth=auth)
 
     thread_map(_run_download, batches, max_workers=5)
     return out_products
@@ -146,22 +154,23 @@ def main() -> list[Path]:
     """Run the script to generate the list of bursts from a single date."""
 
     args = _get_cli_args()
+    out_dir = args.out_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Getting list of granules for %s from CMR STAC catalog", args.date)
+    granule_list_file = get_asf_list(args.date, out_dir)
+    granules = granule_list_file.read_text().splitlines()
 
     out_paths = []
     for satellite in ["A", "B"]:
         logger.info("Processing Sentinel-%s", satellite)
         # Create the output directory
         out_dir = args.out_dir
-        out_dir = out_dir / f"S1{satellite}"
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-        granule_list_file = get_asf_list(
-            args.date, out_dir, max_workers=args.max_workers
-        )
-        granules = granule_list_file.read_text().splitlines()
+        cur_dir = out_dir / f"S1{satellite}"
+        cur_dir.mkdir(exist_ok=True)
 
         # Download the SAFE metadata
-        annotation_dir = out_dir / "annotations"
+        annotation_dir = cur_dir / "annotations"
         annotation_dir.mkdir(exist_ok=True)
         annotation_files = get_annotations(granules, annotation_dir)
 
@@ -176,7 +185,7 @@ def main() -> list[Path]:
         burst_csv_file = get_burst_csvs(
             date=args.date.date(),
             safe_list=annotation_files,
-            out_dir=out_dir,
+            out_dir=cur_dir,
             orbit_file=orbit_file,
         )
         out_paths.append(burst_csv_file)
