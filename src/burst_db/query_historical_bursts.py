@@ -147,3 +147,48 @@ def _get_query(
         query += "\nAND sensing_time <= ?"
         args += [max_datetime.date()]
     return query, args
+
+
+def get_gdf(
+    wkt: str,
+    filename: str = "./all_bursts_with_opera_db.duckdb",
+    min_datetime: Optional[datetime] = None,
+    max_datetime: Optional[datetime] = None,
+    to_geodataframe: bool = False,
+    debug: bool = False,
+):
+    import duckdb
+    import shapely.wkt
+
+    sql = f"""
+    SELECT b.burst_id_jpl, sensing_time, ST_AsText(bm.geom) as geom_wkt
+    FROM bursts b
+    JOIN burst_id_map bm using (burst_id_jpl)
+    WHERE ST_Intersects(bm.geom, ST_Extent(ST_GeomFromText('{wkt}')))
+    """
+    if min_datetime:
+        # allow date or datetime
+        d = min_datetime.date() if isinstance(min_datetime, datetime) else min_datetime
+        sql += f"AND sensing_time >= '{d}'\n"
+    if max_datetime:
+        d = max_datetime.date() if isinstance(max_datetime, datetime) else max_datetime
+        sql += f"AND sensing_time <= '{d}'\n"
+
+    if debug:
+        print(sql)
+    with duckdb.connect(filename) as con:
+        con.install_extension("spatial")
+        con.load_extension("spatial")
+        df = con.sql(sql).df()
+    if to_geodataframe:
+        import geopandas as gpd
+
+        gdf = gpd.GeoDataFrame(
+            df, crs="EPSG:4326", geometry=gpd.GeoSeries.from_wkt(df.geom_wkt)
+        )
+        return gdf.drop("geom_wkt", axis="columns")
+    else:
+        geom = df.geom_wkt.apply(shapely.wkt.loads)
+        df["geometry"] = geom
+        df.drop("geom_wkt", axis="columns", inplace=True)
+        return df

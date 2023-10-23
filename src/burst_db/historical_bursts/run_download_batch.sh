@@ -28,8 +28,8 @@ remote_filename="s3://${bucket}/${REMAINING_FOLDER}/${part_file_name}"
 
 # Download safe_list from S3 to a local file (assuming you want to download it)
 echo "Downloading $remote_filename to $part_file_name"
-aws s3 cp "$remote_filename"  "$part_file_name"
+aws s3 cp "$remote_filename" "$part_file_name"
 
 # Run the Python script
-echo /src/download.py --batch-size "$BATCH_SIZE" --start-idx "$BATCH_INDEX_START" --max-work "$MAX_WORKERS" --bucket ${bucket} --folder ${out_folder} --safe-list "$part_file_name"
-python /src/download.py --batch-size "$BATCH_SIZE" --start-idx "$BATCH_INDEX_START" --max-work "$MAX_WORKERS" --bucket ${bucket} --folder ${out_folder} --safe-list "$part_file_name"
+echo /src/download_annotations.py --batch-size "$BATCH_SIZE" --start-idx "$BATCH_INDEX_START" --max-work "$MAX_WORKERS" --bucket ${bucket} --folder ${out_folder} --safe-list "$part_file_name"
+python /src/download_annotations.py --batch-size "$BATCH_SIZE" --start-idx "$BATCH_INDEX_START" --max-work "$MAX_WORKERS" --bucket ${bucket} --folder ${out_folder} --safe-list "$part_file_name"

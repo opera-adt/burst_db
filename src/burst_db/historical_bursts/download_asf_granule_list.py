@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Functions for downloading the list of Sentinel-1 granules available from ASF.
 
-Uses the STAC catalog run by CMR at https://cmr.earthdata.nasa.gov/stac/ASF/
+Uses the STAC catalog run by CMR at https://cmr.earthdata.nasa.gov/cloudstac/ASF/
 """
 from __future__ import annotations
 
@@ -28,9 +28,6 @@ h.setFormatter(
 )
 logger.addHandler(h)
 logger.setLevel(logging.INFO)
-
-
-logging.getLogger("asfsmd").setLevel(logging.WARNING)
 
 
 @dataclass
@@ -163,3 +160,7 @@ def main() -> None:
 
     # Get the list of SAFE granule names
     stac_search.get_all_safe_names()
+
+
+if __name__ == "__main__":
+    main()

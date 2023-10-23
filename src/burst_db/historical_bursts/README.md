@@ -15,3 +15,7 @@ The three main steps were
 3. From the Annotation XML files in each granule, run `parse_bursts.py` (which rips out a subset of [s1reader](https://github.com/opera-adt/s1-reader)) to determine which burst IDs are in a granule. Record the burst ID, sensing_time, granule, and approximate WKT geometry
 
 After creating the Burst ID/Frame ID geopackage database and the historical catalog of ~50 million bursts, a merged database was created with `export_denormalized_db.py`.
+
+## Getting the bursts for one new date
+
+To append the new date to the historical database, run `download_asf_granule_list.py` and `download.py` as above. Then, run `parse_bursts.py` with the `--append` flag to add the new date to the database.

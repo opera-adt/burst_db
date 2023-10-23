@@ -6,8 +6,9 @@ from typing import Optional
 
 import pandas as pd
 import typer
-from shapely import box
 from typing_extensions import Annotated
+
+from .utils import build_wkt_from_bbox
 
 DEFAULT_DB = Path("~/dev/opera-s1-disp.gpkg").expanduser()
 
@@ -59,11 +60,6 @@ def query_database(frame_id: int, db_path: Path) -> dict:
     return out_dict[frame_id]
 
 
-def build_wkt_from_bbox(xmin: float, ymin: float, xmax: float, ymax: float) -> str:
-    """Convert bounding box coordinates to WKT POLYGON string."""
-    return box(xmin, ymin, xmax, ymax).wkt
-
-
 def intersect(
     db_path: Path = DEFAULT_DB,
     bbox: Annotated[
@@ -109,7 +105,7 @@ BBox AS (
     FROM given_geom
 )
 
-SELECT fid as frame_id, epsg, relative_orbit_number, orbit_pass, 
+SELECT fid as frame_id, epsg, relative_orbit_number, orbit_pass,
        is_land, is_north_america, ASText(GeomFromGPB(geom)) AS wkt
 FROM frames
 WHERE fid IN (
@@ -136,11 +132,11 @@ AND Intersects((SELECT g FROM given_geom), GeomFromGPB(geom));
 def lookup(
     frame_id: int,
     db_path: Annotated[
-        Path, typer.Option(help="Path to the geopackage database.")
+        Path, typer.Option(default=DEFAULT_DB, help="Path to the geopackage database.")
     ] = DEFAULT_DB,
     # db_path: Path = DEFAULT_DB,
 ):
-    """Query the geopackage database and return the result as JSON based on the provided frame ID."""
+    """Query the geopackage database for one frame ID."""
     result = query_database(frame_id, db_path)
     typer.echo(json.dumps(result, indent=4))
 
