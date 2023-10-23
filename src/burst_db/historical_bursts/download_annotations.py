@@ -36,6 +36,7 @@ def download_safe_metadata(
     pol: str = "vv",
     outdir: str | Path = Path("."),
     skip_if_exists: bool = True,
+    skip_errors: bool = True,
 ):
     # out_product = (Path(outdir) / product_name).with_suffix(".SAFE")
     out_products = [Path(outdir) / p for p in product_names]
@@ -56,10 +57,14 @@ def download_safe_metadata(
         time.sleep(20)
         try:
             _download_safe_metadata(remaining_products, pol=pol, outdir=Path(outdir))
-        except Exception:
+        except Exception as e:
             logger.error(
                 f"Error downloading data from {remaining_products}", exc_info=True
             )
+            if skip_errors:
+                return
+            else:
+                raise e
 
 
 # @backoff.on_exception(backoff.expo, Exception, max_tries=2)

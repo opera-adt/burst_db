@@ -98,10 +98,12 @@ class StacSearch:
 
         return polygon.wkt, concept_id
 
-    def get_all_safe_names(self, overwrite: bool = False, missions=["A", "B"]):
+    def get_all_safe_names(
+        self, overwrite: bool = False, missions=["A", "B"]
+    ) -> list[Path]:
         """Grab the list of SAFE names for each date in parallel."""
 
-        def _save_save_list(date):
+        def _save_save_list(date) -> Path:
             output_name = self.output_dir / f"safes-{date.strftime('%Y-%m-%d')}.txt"
             if output_name.exists() and not overwrite:
                 print(f"{output_name} exists, skipping")
@@ -110,9 +112,10 @@ class StacSearch:
                 f.write("\n")
                 f.write("\n".join(safe_list))
                 f.write("\n")
+            return output_name
 
         dates = pd.date_range(self.start_date, self.end_date, freq="1D").to_pydatetime()
-        thread_map(_save_save_list, dates, max_workers=self.max_workers)
+        return thread_map(_save_save_list, dates, max_workers=self.max_workers)
 
 
 def main() -> None:

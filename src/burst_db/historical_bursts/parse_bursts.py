@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 import argparse
 import datetime
 import json
@@ -11,17 +13,17 @@ import zipfile
 from dataclasses import astuple, dataclass
 from functools import cache
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Sequence
 
 import boto3
-from botocore.exceptions import ClientError
-from botocore.config import Config
 import lxml.etree as ET
 import numpy as np
 
 # import pandas as pd
 import shapely.ops
 import shapely.wkt
+from botocore.config import Config
+from botocore.exceptions import ClientError
 from dateutil.parser import parse
 from eof import download
 from scipy.interpolate import InterpolatedUnivariateSpline
@@ -892,10 +894,9 @@ def _get_objects(
 
 def make_all_safe_metadata(
     *,
-    safe_list: list[str | Path] | None = None,
+    safe_list: Sequence[str | Path],
     out_dir: str | Path,
     orbit_file: str | Path,
-    max_workers=20,
 ) -> list[Path]:
     warnings.filterwarnings("ignore", category=UserWarning)  # s1reader is chatty
 
