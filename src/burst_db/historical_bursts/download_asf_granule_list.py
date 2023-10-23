@@ -115,7 +115,10 @@ class StacSearch:
             return output_name
 
         dates = pd.date_range(self.start_date, self.end_date, freq="1D").to_pydatetime()
-        return thread_map(_save_save_list, dates, max_workers=self.max_workers)
+        if len(dates) > 1:
+            return thread_map(_save_save_list, dates, max_workers=self.max_workers)
+        else:
+            return [_save_save_list(dates[0])]
 
 
 def main() -> None:

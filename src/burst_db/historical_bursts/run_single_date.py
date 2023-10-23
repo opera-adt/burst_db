@@ -33,7 +33,6 @@ logger.setLevel(logging.INFO)
 def get_asf_list(
     query_date: datetime.date,
     out_dir: Path,
-    max_workers: int = 10,
 ) -> Path:
     """Download the list of available Sentinel-1 granules from ASF.
 
@@ -45,8 +44,6 @@ def get_asf_list(
         End date for search.
     out_dir : Path
         Output directory for the list of granules.
-    max_workers : int, optional
-        Number of workers to use for downloading the list of granules, by default 10.
 
     Returns
     -------
@@ -59,7 +56,7 @@ def get_asf_list(
     stac_search = download_asf_granule_list.StacSearch(
         start_date=query_date,
         end_date=query_date,
-        max_workers=max_workers,
+        max_workers=1,
         output_dir=out_dir,
     )
 
@@ -146,22 +143,22 @@ def main() -> list[Path]:
     """Run the script to generate the list of bursts from a single date."""
 
     args = _get_cli_args()
+    out_dir = args.out_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    granule_list_file = get_asf_list(args.date, out_dir)
+    granules = granule_list_file.read_text().splitlines()
 
     out_paths = []
     for satellite in ["A", "B"]:
         logger.info("Processing Sentinel-%s", satellite)
         # Create the output directory
         out_dir = args.out_dir
-        out_dir = out_dir / f"S1{satellite}"
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-        granule_list_file = get_asf_list(
-            args.date, out_dir, max_workers=args.max_workers
-        )
-        granules = granule_list_file.read_text().splitlines()
+        cur_dir = out_dir / f"S1{satellite}"
+        cur_dir.mkdir(exist_ok=True)
 
         # Download the SAFE metadata
-        annotation_dir = out_dir / "annotations"
+        annotation_dir = cur_dir / "annotations"
         annotation_dir.mkdir(exist_ok=True)
         annotation_files = get_annotations(granules, annotation_dir)
 
@@ -176,7 +173,7 @@ def main() -> list[Path]:
         burst_csv_file = get_burst_csvs(
             date=args.date.date(),
             safe_list=annotation_files,
-            out_dir=out_dir,
+            out_dir=cur_dir,
             orbit_file=orbit_file,
         )
         out_paths.append(burst_csv_file)
