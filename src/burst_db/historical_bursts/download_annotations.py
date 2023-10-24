@@ -41,6 +41,24 @@ def download_safe_metadata(
     skip_if_exists: bool = True,
     skip_errors: bool = True,
 ):
+    """Download SAFE annotation XML metadata files for `product_names`.
+
+    Parameters
+    ----------
+    product_names : list[str]
+        List of SAFE granule names.
+        Example: ['S1A_IW_SLC__1SDV_20210101T000000_20210101T000030_036462_044C9C_1B1A']
+    pol : str, optional
+        Polarization to download, by default "vv"
+    outdir : str | Path, optional
+        Output directory, by default Path(".")
+    auth : Optional[Auth], optional
+        Authentication object for ASF from `asfsmd` library. By default None
+    skip_if_exists : bool, optional
+        Skip downloading if the output file already exists, by default True
+    skip_errors : bool, optional
+        Skip errors if they occur, by default True
+    """
     # out_product = (Path(outdir) / product_name).with_suffix(".SAFE")
     out_products = [Path(outdir) / p for p in product_names]
     # keep only the ones that don't exist
