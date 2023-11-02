@@ -11,23 +11,33 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
+from asfsmd.cli import _get_auth
 from eof import download
 from tqdm.contrib.concurrent import thread_map
 
 from burst_db.historical_bursts import download_asf_granule_list, parse_bursts
 from burst_db.historical_bursts.download_annotations import download_safe_metadata
 
-logger = logging.getLogger("burst_db")
-# Make a logger good for AWS logs
-h = logging.StreamHandler()
-h.setFormatter(
-    logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%S%z",
+
+def _setup_log() -> logging.Logger:
+    logger = logging.getLogger("burst_db")
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    # Make a logger good for AWS logs
+    h = logging.StreamHandler()
+    h.setFormatter(
+        logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S%z",
+        )
     )
-)
-logger.addHandler(h)
-logger.setLevel(logging.INFO)
+    logger.addHandler(h)
+    logger.setLevel(logging.INFO)
+    return logger
+
+
+logger = _setup_log()
 
 
 def get_asf_list(
@@ -68,20 +78,21 @@ def get_annotations(
     products: Sequence[str | Path], out_dir: Path, batch_size: int = 50
 ):
     """Download the XML annotation files for a list of SAFE products."""
-    print(f"{len(products) = }")
+    auth = _get_auth()
+    logger.info(f"{len(products) = }")
     out_products = [Path(out_dir) / p for p in products]
 
     remaining_products = [
         p for p in products if not (out_dir / (str(p) + ".SAFE")).exists()
     ]
-    print(f"{len(remaining_products) = }")
+    logger.info(f"{len(remaining_products) = }")
     batches = [
         remaining_products[i : i + batch_size]
         for i in range(0, len(remaining_products), batch_size)
     ]
 
     def _run_download(batch):
-        download_safe_metadata(batch, outdir=out_dir, skip_errors=False)
+        download_safe_metadata(batch, outdir=out_dir, skip_errors=False, auth=auth)
 
     thread_map(_run_download, batches, max_workers=5)
     return out_products
@@ -146,6 +157,7 @@ def main() -> list[Path]:
     out_dir = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    logger.info("Getting list of granules for %s from CMR STAC catalog", args.date)
     granule_list_file = get_asf_list(args.date, out_dir)
     granules = granule_list_file.read_text().splitlines()
 
