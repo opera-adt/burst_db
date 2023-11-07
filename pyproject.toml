@@ -32,7 +32,7 @@ Homepage = "https://github.com/opera-adt/burst_db"
 
 # Entry points for the command line interface
 [project.scripts]
-opera-frames = "burst_db.cli:app"
+opera-frames = "burst_db.cli:cli_app"
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
