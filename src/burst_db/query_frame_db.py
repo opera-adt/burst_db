@@ -2,11 +2,10 @@
 import json
 import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
+import click
 import pandas as pd
-import typer
-from typing_extensions import Annotated
 
 from .utils import build_wkt_from_bbox
 
@@ -60,28 +59,30 @@ def query_database(frame_id: int, db_path: Path) -> dict:
     return out_dict[frame_id]
 
 
+@click.command(context_settings={"show_default": True})
+@click.option(
+    "--db-path",
+    type=click.Path(exists=True),
+    default=DEFAULT_DB,
+    show_default=True,
+    help="Path to the geopackage database.",
+)
+@click.option(
+    "--bbox",
+    type=float,
+    nargs=4,
+    help="(left, bottom, right, top) Lon/lat bounding box of area of interest.",
+)
+@click.option("--wkt", help="Well-Known Text (WKT) representation of geometry.")
 def intersect(
-    db_path: Path = DEFAULT_DB,
-    bbox: Annotated[
-        MaybeBbox,
-        typer.Option(
-            "--bbox",
-            metavar="LEFT BOTTOM RIGHT TOP",
-            help="Lon/lat bounding box of area of interest.",
-        ),
-    ] = None,
-    wkt: Annotated[
-        Optional[str],
-        typer.Option("--wkt", help="Well-Known Text (WKT) representation of geometry."),
-    ] = None,
+    db_path: Path, bbox: Optional[Tuple[float, float, float, float]], wkt: Optional[str]
 ):
     """Query for frames intersecting a given bounding box or WKT geometry."""
     if bbox is None and wkt is None:
-        raise typer.BadParameter(
+        raise click.BadParameter(
             "Please provide either --bbox or --wkt option, not both or neither."
         )
     wkt_str = build_wkt_from_bbox(*bbox) if bbox is not None else wkt
-
     # Doing this query is slow, doesn't use the spatial index
     # query = """
     # SELECT *
@@ -126,20 +127,20 @@ AND Intersects((SELECT g FROM given_geom), GeomFromGPB(geom));
         df_intersecting_frames = pd.read_sql_query(query, con, params=[wkt_str])
 
     out_dict = df_intersecting_frames.to_dict(orient="records")
-    typer.echo(json.dumps(out_dict, indent=4))
+    click.echo(json.dumps(out_dict, indent=4))
 
 
-def lookup(
-    frame_id: int,
-    db_path: Annotated[
-        Path, typer.Option(default=DEFAULT_DB, help="Path to the geopackage database.")
-    ] = DEFAULT_DB,
-    # db_path: Path = DEFAULT_DB,
-):
+@click.command(context_settings={"show_default": True})
+@click.argument("frame_id", type=int)
+@click.option(
+    "--db-path",
+    type=click.Path(exists=True),
+    default=DEFAULT_DB,
+    show_default=True,
+    help="Path to the geopackage database.",
+)
+def lookup(frame_id: int, db_path: Path):
     """Query the geopackage database for one frame ID."""
+    # Assuming `query_database` is a function defined elsewhere that returns the result
     result = query_database(frame_id, db_path)
-    typer.echo(json.dumps(result, indent=4))
-
-
-if __name__ == "__main__":
-    typer.run(intersect)
+    click.echo(json.dumps(result, indent=4))

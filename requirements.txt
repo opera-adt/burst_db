@@ -1,9 +1,9 @@
+click
 geopandas
 numpy
 pandas
 pip
 shapely
 tqdm
-typer
 unzip-http
 utm

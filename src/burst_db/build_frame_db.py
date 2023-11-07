@@ -4,15 +4,14 @@ import sqlite3
 import time
 from pathlib import Path
 
+import click
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-import typer
 import utm  # https://github.com/Turbo87/utm
 from shapely import GeometryType, STRtree
 from shapely.affinity import translate
 from tqdm.auto import tqdm
-from typing_extensions import Annotated
 
 from burst_db import __version__
 
@@ -550,64 +549,59 @@ def create_metadata_table(db_path, metadata):
         df.to_sql("metadata", con, if_exists="replace", index=False)
 
 
+@click.command(context_settings={"show_default": True})
+@click.option(
+    "--esa-db-path",
+    default="burst_map_IW_000001_375887.sqlite3",
+    help=(
+        "Path to the ESA sqlite burst database to convert, downloaded from"
+        f" {ESA_DB_URL}. Will be downloaded if not exists."
+    ),
+)
+@click.option(
+    "--snap",
+    default=30.0,
+    help="Snap the bounding box to the nearest multiple of this value.",
+)
+@click.option(
+    "--margin",
+    default=5000.0,
+    help="Add this margin surrounding the bounding box of bursts.",
+)
+@click.option(
+    "--optimize-land",
+    is_flag=True,
+    help="Create frames which attempt to minimize the number of majority-water frames.",
+)
+@click.option("--target-frame", default=9, help="Target number of bursts per frame.")
+@click.option(
+    "--min-frame",
+    default=5,
+    help="(If using `--optimize-land`): Minimum number of bursts per frame.",
+)
+@click.option(
+    "--max-frame",
+    default=10,
+    help="(If using `--optimize-land`): Maximum number of bursts per frame.",
+)
+@click.option("--outfile", default="opera-s1-disp.gpkg", help="Output file name")
+@click.option(
+    "--land-buffer-deg",
+    default=0.3,
+    help="A buffer (in degrees) to indicate that a frame is near land.",
+)
 def create(
-    esa_db_path: Annotated[
-        str,
-        typer.Option(
-            help=(
-                "Path to the ESA sqlite burst database to convert, downloaded from"
-                f" {ESA_DB_URL}. Will be downloaded if not exists."
-            ),
-        ),
-    ] = "burst_map_IW_000001_375887.sqlite3",
-    snap: Annotated[
-        float,
-        typer.Option(
-            help="Snap the bounding box to the nearest multiple of this value."
-        ),
-    ] = 30.0,
-    margin: Annotated[
-        float,
-        typer.Option(help="Add this margin surrounding the bounding box of bursts."),
-    ] = 5000.0,
-    optimize_land: Annotated[
-        bool,
-        typer.Option(
-            help=(
-                "Create frames which attempt to minimize the number of majority-water"
-                " frames."
-            ),
-        ),
-    ] = False,
-    target_frame: Annotated[
-        int, typer.Option(help="Target number of bursts per frame.")
-    ] = 9,
-    min_frame: Annotated[
-        int,
-        typer.Option(
-            help="(If using `--optimize-land`): Minimum number of bursts per frame."
-        ),
-    ] = 5,
-    max_frame: Annotated[
-        int,
-        typer.Option(
-            help="(If using `--optimize-land`): Maximum number of bursts per frame."
-        ),
-    ] = 10,
-    outfile: Annotated[
-        str, typer.Option(help="Output file name")
-    ] = "opera-s1-disp.gpkg",
-    land_buffer_deg: Annotated[
-        float,
-        typer.Option(
-            help="A buffer (in degrees) to indicate that a frame is near land."
-        ),
-    ] = 0.3,
+    esa_db_path,
+    snap,
+    margin,
+    optimize_land,
+    target_frame,
+    min_frame,
+    max_frame,
+    outfile,
+    land_buffer_deg,
 ):
     """Generate the OPERA frame database for Sentinel-1 data."""
-    # Your main processing code would go here
-    # For now, just an example of using one of the arguments:
-
     t0 = time.time()
 
     # Read ESA's Burst Data

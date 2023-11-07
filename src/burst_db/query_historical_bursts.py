@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import csv
 import sqlite3
-import sys
 from datetime import date, datetime
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
-import typer
+import click
 
-from burst_db.utils import read_zipped_json
+from burst_db.utils import read_zipped_json  # Ensure this import is correct
 
 FRAME_TO_BURST_JSON_FILE = Path(
     "/home/staniewi/dev/opera-s1-disp-frame-to-burst.json.zip"
@@ -24,7 +23,7 @@ def _fetch_base(
     select_columns: Sequence[str] = ["*"],
     min_datetime: Optional[datetime] = None,
     max_datetime: Optional[datetime] = None,
-    output_file: Optional[typer.FileTextWrite] = None,
+    output_file: click.File = None,
     db_path: Path = DB_PATH,
     frame_to_burst_json_file: Path = FRAME_TO_BURST_JSON_FILE,
     headers: bool = True,
@@ -45,7 +44,7 @@ def _fetch_base(
     with sqlite3.connect(db_path) as conn:
         if debug:
             # This adds a callback to print the executed statements to stderr
-            conn.set_trace_callback(partial(typer.echo, err=True))
+            conn.set_trace_callback(partial(click.echo, err=True))
 
         cursor = conn.cursor()
 
@@ -56,8 +55,6 @@ def _fetch_base(
             max_datetime=max_datetime,
         )
         results = cursor.execute(query, args).fetchall()
-        if not output_file:
-            output_file = sys.stdout
         writer = csv.writer(output_file)
 
         if headers:
@@ -69,16 +66,47 @@ def _fetch_base(
     return out
 
 
+@click.command(context_settings={"show_default": True})
+@click.argument("frame_ids", nargs=-1)
+@click.option(
+    "--min-datetime",
+    type=click.DateTime(),
+    help="Minimum datetime for filtering results.",
+)
+@click.option(
+    "--max-datetime",
+    type=click.DateTime(),
+    help="Maximum datetime for filtering results.",
+)
+@click.option("--output-file", type=click.File("w"), help="Output file path.")
+@click.option(
+    "--db-path",
+    type=click.Path(exists=True),
+    default=DB_PATH,
+    show_default=True,
+    help="Database file path.",
+)
+@click.option(
+    "--frame-to-burst-json-file",
+    type=click.Path(exists=True),
+    default=FRAME_TO_BURST_JSON_FILE,
+    show_default=True,
+    help="Frame to burst JSON file path.",
+)
+@click.option("--headers", is_flag=True, help="Include headers in the output.")
+@click.option("--debug", is_flag=True, help="Enable debug mode.")
 def fetch_granules(
-    frame_ids: list[str],
-    min_datetime: Optional[datetime] = None,
-    max_datetime: Optional[datetime] = None,
-    output_file: Optional[typer.FileTextWrite] = None,
-    db_path: Path = DB_PATH,
-    frame_to_burst_json_file: Path = FRAME_TO_BURST_JSON_FILE,
-    headers: bool = False,
-    debug: bool = False,
-) -> list[Any]:
+    frame_ids,
+    min_datetime,
+    max_datetime,
+    output_file,
+    db_path,
+    frame_to_burst_json_file,
+    headers,
+    debug,
+):
+    """Fetch granules for given frame IDs."""
+
     def row_processor(row):
         return row[0].replace(".SAFE", "")
 
@@ -96,17 +124,49 @@ def fetch_granules(
     )
 
 
+@click.command(context_settings={"show_default": True})
+@click.argument("frame_ids", nargs=-1)
+@click.option(
+    "--min-datetime",
+    type=click.DateTime(),
+    help="Minimum datetime for filtering results.",
+)
+@click.option(
+    "--max-datetime",
+    type=click.DateTime(),
+    help="Maximum datetime for filtering results.",
+)
+@click.option("--output-file", type=click.File("w"), help="Output file path.")
+@click.option(
+    "--db-path",
+    type=click.Path(exists=True),
+    default=DB_PATH,
+    show_default=True,
+    help="Database file path.",
+)
+@click.option(
+    "--frame-to-burst-json-file",
+    type=click.Path(exists=True),
+    default=FRAME_TO_BURST_JSON_FILE,
+    show_default=True,
+    help="Frame to burst JSON file path.",
+)
+@click.option("--headers", is_flag=True, help="Include headers in the output.")
+@click.option(
+    "--with-granule", is_flag=True, help="Include granule information in the output."
+)
+@click.option("--debug", is_flag=True, help="Enable debug mode.")
 def fetch_bursts(
-    frame_ids: list[str],
-    min_datetime: Optional[datetime] = None,
-    max_datetime: Optional[datetime] = None,
-    output_file: Optional[typer.FileTextWrite] = None,
-    db_path: Path = DB_PATH,
-    frame_to_burst_json_file: Path = FRAME_TO_BURST_JSON_FILE,
-    headers: bool = False,
-    with_granule: bool = False,
-    debug: bool = False,
-) -> list[Any]:
+    frame_ids,
+    min_datetime,
+    max_datetime,
+    output_file,
+    db_path,
+    frame_to_burst_json_file,
+    headers,
+    with_granule,
+    debug,
+):
     """Get all (burst_id_jpl, sensing_time) for a list of frame ids."""
     select_columns = ["burst_id_jpl", "sensing_time"]
     if with_granule:
