@@ -19,3 +19,12 @@ After creating the Burst ID/Frame ID geopackage database and the historical cata
 ## Getting the bursts for one new date
 
 To append the new date to the historical database, run `download_asf_granule_list.py` and `download.py` as above. Then, run `parse_bursts.py` with the `--append` flag to add the new date to the database.
+
+
+```
+$ time ~/repos/burst_db/src/burst_db/historical_bursts/run_single_date.py -d 2023-09-22 &> process-20230922.log
+
+real    15m8.107s
+user    0m59.483s
+sys     0m13.497s
+```

@@ -80,15 +80,14 @@ def get_annotations(
     """Download the XML annotation files for a list of SAFE products."""
     auth = _get_auth()
     logger.info(f"{len(products) = }")
-    out_products = [Path(out_dir) / p for p in products]
+    out_products = [(out_dir / (str(p) + ".SAFE")) for p in products]
 
-    remaining_products = [
-        p for p in products if not (out_dir / (str(p) + ".SAFE")).exists()
-    ]
+    remaining_products = [p for p in out_products if not p.exists()]
     logger.info(f"{len(remaining_products) = }")
+    remaining_names = [p.name.replace(".SAFE", "") for p in remaining_products]
     batches = [
-        remaining_products[i : i + batch_size]
-        for i in range(0, len(remaining_products), batch_size)
+        remaining_names[i : i + batch_size]
+        for i in range(0, len(remaining_names), batch_size)
     ]
 
     def _run_download(batch):
@@ -99,11 +98,11 @@ def get_annotations(
 
 
 def get_burst_csvs(
-    date: datetime.date,
     safe_list: Sequence[str | Path],
     out_dir: Path,
+    out_csv: Path,
     orbit_file: Path,
-) -> Path:
+) -> None:
     """Parse the SAFE metadata to get the list of bursts ."""
     logger.info("Finding bursts in SAFE files")
     csv_files = parse_bursts.make_all_safe_metadata(
@@ -111,9 +110,8 @@ def get_burst_csvs(
         out_dir=out_dir,
         orbit_file=orbit_file,
     )
-
     # Combine all the CSVs into one per date
-    return parse_bursts._combine_csvs_by_date(csv_files, date, out_dir, no_clean=False)
+    parse_bursts._combine_csvs_by_date(csv_files, out_csv, no_clean=False)
 
 
 def _get_cli_args() -> argparse.Namespace:
@@ -150,46 +148,56 @@ def _get_cli_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> list[Path]:
+def main() -> Path:
     """Run the script to generate the list of bursts from a single date."""
 
     args = _get_cli_args()
     out_dir = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    date_str = args.date.strftime("%Y%m%d")
     logger.info("Getting list of granules for %s from CMR STAC catalog", args.date)
     granule_list_file = get_asf_list(args.date, out_dir)
     granules = granule_list_file.read_text().splitlines()
 
-    out_paths = []
+    out_csv = out_dir / f"{date_str}.csv"
+    out_dir_by_date = out_dir / f"{date_str}"
+    out_dir_by_date.mkdir(exist_ok=True)
+
+    # Filename for the final
     for satellite in ["A", "B"]:
+        if not parse_bursts._is_valid_date(args.date, satellite):
+            logger.info("Skipping Sentinel-%s, not valid for %s", satellite, args.date)
+            continue
+
         logger.info("Processing Sentinel-%s", satellite)
         # Create the output directory
         out_dir = args.out_dir
-        cur_dir = out_dir / f"S1{satellite}"
-        cur_dir.mkdir(exist_ok=True)
 
         # Download the SAFE metadata
-        annotation_dir = cur_dir / "annotations"
-        annotation_dir.mkdir(exist_ok=True)
-        annotation_files = get_annotations(granules, annotation_dir)
+        annotation_files = get_annotations(granules, out_dir_by_date)
 
         # Get the orbit for the date
         orbit_file = download.main(
             save_dir=args.orbit_dir,
-            date=args.date,
+            date=date_str,
             mission=f"S1{satellite}",
         )[0]
 
         # Parse the SAFE metadata to get the list of bursts
-        burst_csv_file = get_burst_csvs(
-            date=args.date.date(),
+        cur_burst_csv_file = out_dir_by_date / f"{date_str}_{satellite}.csv"
+        get_burst_csvs(
             safe_list=annotation_files,
-            out_dir=cur_dir,
+            out_dir=out_dir_by_date,
+            out_csv=cur_burst_csv_file,
             orbit_file=orbit_file,
         )
-        out_paths.append(burst_csv_file)
-    return out_paths
+
+        # Append this to the total burst CSV output in `out_dir`
+        with open(out_csv, "a") as f:
+            f.write(cur_burst_csv_file.read_text())
+
+    return out_csv
 
 
 if __name__ == "__main__":

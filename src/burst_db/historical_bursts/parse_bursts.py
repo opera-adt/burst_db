@@ -363,7 +363,7 @@ def _bursts_from_xml(annotation_path: str, orbit_path: str, open_method=open):
 @cache
 def get_osv_list_from_orbit(orbit_file: str):
     """
-    Get the list of orbit state vectors as ElementTree (ET) objects from the orbit file `orbit_file`
+    Get the orbit state vectors as ET objects from `orbit_file`.
 
     Parameters
     ----------
@@ -497,20 +497,6 @@ def get_ascending_node_time_orbit(
     if search_length is None:
         search_length = datetime.timedelta(seconds=2 * T_ORBIT)
 
-    # Load the OSVs
-    # utc_vec_all = []
-    # pos_z_vec_all = []
-    # for osv in orbit_state_vector_list:
-    #     utc_str = osv.find('UTC').text.split('=')[1]
-    #     utc_vec_all.append(datetime.datetime.fromisoformat(utc_str))
-    #     pos_z_vec_all.append(float(osv.find('Z').text))
-
-    # # utc_vec_all = [datetime.datetime.fromisoformat(osv.find('UTC').text.replace('UTC=',''))
-    # #                for osv in orbit_state_vector_list]
-    # utc_vec_all = np.array(utc_vec_all)
-    # # pos_z_vec_all = [float(osv.find('Z').text)
-    # #                  for osv in orbit_state_vector_list]
-    # pos_z_vec_all = np.array(pos_z_vec_all)
     utc_vec_all, pos_z_vec_all = _get_utc_z(orbit_state_vector_list)
 
     # NOTE: tried to apply the same amount of pading in `get_burst_orbit` to
@@ -674,7 +660,9 @@ def unzip_safe(file_path: str | Path, output_directory: Path):
             zip_ref.extractall(extraction_path)
 
 
-def bursts_from_safe_dir(safe_path: str, orbit_path: str) -> list[S1Burst]:
+def bursts_from_safe_dir(
+    safe_path: str | Path, orbit_path: str | Path
+) -> list[S1Burst]:
     """Find S1Bursts in a Sentinel-1 SAFE structured directory/zipfile.
 
     Parameters:
@@ -802,7 +790,7 @@ def _s5cmd_copy(
         str(max_workers),
         "cp",
         f"{full_s3_path}*",
-        str(out_dir.resolve()),
+        str(Path(out_dir).resolve()),
     ]
     out = subprocess.run(
         cmd,
@@ -918,16 +906,13 @@ def make_all_safe_metadata(
 
 def _combine_csvs_by_date(
     csv_files: list[Path],
-    date: datetime.datetime | datetime.date,
-    out_dir: Path,
+    output: str | Path,
     no_clean: bool = False,
-) -> Path:
-    date_output = out_dir / f"{date.strftime('%Y%m%d')}.csv"
-    logger.info("Combining CSVs into %s", date_output)
+) -> None:
     # Read each of the files in `csv_files` and simply concatenate them to
     # a single file in `date_output`
     # Open the output file in write mode
-    with open(date_output, "w") as outfile:
+    with open(output, "w") as outfile:
         # Loop over each text file and write its contents to the output file
         for p in csv_files:
             with open(p, "r") as infile:
@@ -936,31 +921,44 @@ def _combine_csvs_by_date(
                 logger.debug("Removing CSVs")
                 p.unlink()
 
-    return date_output
 
+def _is_valid_date(
+    check_date: datetime.datetime | datetime.date, satellite: str
+) -> bool:
+    if isinstance(check_date, datetime.datetime):
+        comparison_date = check_date.date()
+    else:
+        comparison_date = check_date
 
-def _is_valid_date(date: datetime.datetime, satellite: str) -> bool:
-    # max_date = datetime.datetime.today()
-    max_date = datetime.datetime(2023, 8, 1)
+    # POEORB files get generated about 3 weeks after the acquisition date
+    # TODO: do i care? should i allow resorbs?
+    max_date = (datetime.datetime.today() - datetime.timedelta(days=21)).date()
+    # max_date = datetime.date(2023, 8, 1)
     # https://cmr.earthdata.nasa.gov/cloudstac/ASF/collections/SENTINEL-1A_SLC.v1/2014/10
-    s1a_start_date = datetime.datetime(2014, 10, 3)
+    s1a_start_date = datetime.date(2014, 10, 3)
     # https://cmr.earthdata.nasa.gov/cloudstac/ASF/collections/SENTINEL-1B_SLC.v1/2016/08
-    s1b_start_date = datetime.datetime(2016, 8, 20)
+    s1b_start_date = datetime.date(2016, 8, 20)
     # https://cmr.earthdata.nasa.gov/cloudstac/ASF/collections/SENTINEL-1B_SLC.v1/2021/12
-    s1b_end_date = datetime.datetime(2021, 12, 23)
-    if date > max_date:
-        logger.info(f"Skipping {date} since it is past {max_date = }")
+    s1b_end_date = datetime.date(2021, 12, 23)
+    if comparison_date > max_date:
+        logger.info(f"Skipping {comparison_date} since it is past {max_date = }")
         return False
     if satellite == "A":
-        if date < s1a_start_date:
-            logger.info(f"Skipping {date} since it is before {s1a_start_date = }")
+        if comparison_date < s1a_start_date:
+            logger.info(
+                f"Skipping {comparison_date} since it is before {s1a_start_date = }"
+            )
             return False
     else:
-        if date < s1b_start_date:
-            logger.info(f"Skipping {date} since it is before {s1b_start_date = }")
+        if comparison_date < s1b_start_date:
+            logger.info(
+                f"Skipping {comparison_date} since it is before {s1b_start_date = }"
+            )
             return False
-        if date > s1b_end_date:
-            logger.info(f"Skipping {date} since it is after {s1b_end_date = }")
+        if comparison_date > s1b_end_date:
+            logger.info(
+                f"Skipping {comparison_date} since it is after {s1b_end_date = }"
+            )
             return False
     return True
 
@@ -1145,16 +1143,16 @@ def main() -> None:
             safe_list=safes,
             out_dir=out_dir,
             orbit_file=orbit_file,
-            max_workers=args.max_workers,
+            # max_workers=args.max_workers,
         )
 
         # Combine all the CSVs into one per date
         if args.combine_by_date:
-            out = _combine_csvs_by_date(
-                csv_files, date, out_dir, no_clean=args.no_clean
-            )
+            date_output = out_dir / f"{date.strftime('%Y%m%d')}.csv"
+            logger.info("Combining CSVs into %s", date_output)
+            _combine_csvs_by_date(csv_files, output=date_output, no_clean=args.no_clean)
             # We only need to upload the combined CSV
-            csv_files = [out]
+            csv_files = [date_output]
 
         if args.no_upload:
             logger.info("Skipping upload to S3.")
