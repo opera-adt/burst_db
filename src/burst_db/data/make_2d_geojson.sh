@@ -36,7 +36,8 @@ script_dir=$(dirname $(readlink -f $0))
 
 sql_query_burst_id=$(
     cat <<'EOF'
-SELECT f.fid,
+SELECT b.fid,
+    b.burst_id_jpl,
     is_land,
     is_north_america,
     b.orbit_pass,
