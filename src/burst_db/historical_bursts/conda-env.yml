@@ -20,5 +20,3 @@ dependencies:
   - tqdm
   # - pip:
   #   - https://github.com/scottstanie/asfsmd/archive/s3fs-client.zip  # My branch with changes
-
-
