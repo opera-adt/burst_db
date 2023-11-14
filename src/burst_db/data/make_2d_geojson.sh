@@ -1,15 +1,19 @@
 set -e
 set -x
 
+burst_db_version=$(python -c 'import burst_db; print(burst_db.__version__)')
+echo "Burst database software version: $burst_db_version"
+
+# TODO: this should have a version in it now. need different way to call
 in_file=${1-opera-s1-disp.gpkg}
-out_file=${2-opera-s1-disp-2d.gpkg}
+db_file_2d=${2-opera-s1-disp-2d.gpkg}
 # Convert geometries to multipolygons
 # Convert to 2D (no Z)
 
-if [ -f "$out_file" ]; then
+if [ -f "$db_file_2d" ]; then
     echo "File exists"
 else
-    echo "Creating $out_file"
+    echo "Creating $db_file_2d"
 
     query_base="SELECT AsGPB(CastToXY(GeomFromGPB(geom))) AS geom, * from"
     # Also simplify to a 0.1 degree tolerance
@@ -18,21 +22,21 @@ else
 
     ogr2ogr -nln frames -nlt MULTIPOLYGON -dialect sqlite \
         -sql "$query_base frames" \
-        "$out_file" "$in_file"
+        "$db_file_2d" "$in_file"
     table_name="burst_id_map"
     ogr2ogr -append -nln $table_name -nlt MULTIPOLYGON -dialect sqlite \
         -sql "$query_base $table_name" \
-        "$out_file" "$in_file"
+        "$db_file_2d" "$in_file"
     table_name="frames_bursts"
     ogr2ogr -append -nln $table_name -dialect sqlite \
         -sql "SELECT * from $table_name" \
-        "$out_file" "$in_file"
+        "$db_file_2d" "$in_file"
 fi
 
 script_dir=$(dirname $(readlink -f $0))
 
 # sql_file="$script_dir/make_geojson.sql"
-# duckdb $out_file <$sql_file
+# duckdb $db_file_2d <$sql_file
 
 sql_query_burst_id=$(
     cat <<'EOF'
@@ -62,9 +66,9 @@ EOF
 )
 
 ogr2ogr -f GeoJSON -dialect sqlite -sql "$sql_query_frame" \
-    "frame_geometries_simple.geojson" $out_file
-zip frame_geometries_simple.geojson.zip frame_geometries_simple.geojson
+    "frame-geometries-simple-${burst_db_version}.geojson" $db_file_2d
+zip frame-geometries-simple-${burst_db_version}.geojson.zip frame-geometries-simple-${burst_db_version}.geojson
 
 ogr2ogr -f GeoJSON -dialect sqlite -sql "$sql_query_burst_id" \
-    "burst_id_geometries_simple.geojson" $out_file
-zip burst_id_geometries_simple.geojson.zip burst_id_geometries_simple.geojson
+    "burst-id-geometries-simple-${burst_db_version}.geojson" $db_file_2d
+zip burst-id-geometries-simple-${burst_db_version}.geojson.zip burst-id-geometries-simple-${burst_db_version}.geojson
