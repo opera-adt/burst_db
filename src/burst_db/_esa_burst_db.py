@@ -1,6 +1,7 @@
 """
 An internal module to download the ESA burst database
 """
+
 import os
 import shutil
 import subprocess
