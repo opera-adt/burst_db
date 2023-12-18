@@ -94,9 +94,9 @@ def make_land_optimized_frame_slices(
             )
         )
     # Flatten the list of lists, since each result from executor.map is a list
-    cumulative_slice_idxs = sorted([
-        item for sublist in cumulative_slice_idxs for item in sublist
-    ])
+    cumulative_slice_idxs = sorted(
+        [item for sublist in cumulative_slice_idxs for item in sublist]
+    )
     return cumulative_slice_idxs
 
 
