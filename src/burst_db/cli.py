@@ -14,8 +14,17 @@ def cli_app():
 cli_app.add_command(create)
 cli_app.add_command(intersect)
 cli_app.add_command(lookup)
-cli_app.add_command(fetch_bursts)
-cli_app.add_command(fetch_granules)
+
+
+@click.group()
+def historical():
+    """Sub-commands for interacting with the historical burst database."""
+    pass
+
+
+historical.add_command(fetch_bursts)
+historical.add_command(fetch_granules)
+cli_app.add_command(historical)
 
 if __name__ == "__main__":
     cli_app()

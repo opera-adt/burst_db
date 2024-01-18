@@ -1,8 +1,7 @@
 click
-geopandas
+geopandas-base
 numpy
 pandas
-pip
 shapely
 tqdm
 unzip-http
