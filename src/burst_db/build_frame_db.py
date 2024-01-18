@@ -19,6 +19,7 @@ from . import frames
 from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
 from ._land_usgs import GREENLAND_URL, USGS_LAND_URL, get_greenland_shape, get_land_df
 from ._opera_north_america import get_opera_na_shape
+from .create_2d_geojsons import create_2d_geojsons
 from .utils import write_zipped_json
 
 # Threshold to use EPSG:3413, Sea Ice Polar North (https://epsg.io/3413)
@@ -714,5 +715,9 @@ def create(
     # Add metadata to each
     create_metadata_table(outfile, metadata=metadata)
     create_metadata_table(out_minimal, metadata=metadata)
+
+    # Make the geojson simplified versions
+    output_geojsons = create_2d_geojsons(outfile)
+    print(f"Created geojsons: {output_geojsons}")
 
     print(f"Total time: {time.time() - t0:.2f} seconds")

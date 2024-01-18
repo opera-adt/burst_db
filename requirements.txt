@@ -1,5 +1,5 @@
 click
-geopandas-base
+geopandas
 numpy
 pandas
 shapely
