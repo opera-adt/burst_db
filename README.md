@@ -49,9 +49,11 @@ Commands:
 
 
 ### Creating the Burst database sqlite file
-The `opera-db create` CLI 
+The `opera-db create` CLI will create the Sqlite database containing the burst IDs, bounding boxes, and UTM EPSG codes for all Sentinel-1 burst ID footprints.
 
 The program uses the database of Sentinel-1 bursts released by ESA. The data can be downloaded from [here](https://sar-mpc.eu/files/S1_burstid_20220530.zip), but if it is not present in the current directory, the program will download it automatically.
+
+A larger GeoPackage is created which contains the burst footprint geometries, which can be viewed/queried with GIS program.
 
 
 ### Frame database information
