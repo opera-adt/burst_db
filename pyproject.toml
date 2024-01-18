@@ -32,7 +32,7 @@ Homepage = "https://github.com/opera-adt/burst_db"
 
 # Entry points for the command line interface
 [project.scripts]
-opera-frames = "burst_db.cli:cli_app"
+opera-db = "burst_db.cli:cli_app"
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
@@ -45,7 +45,7 @@ version_scheme = "no-guess-dev" # Will not guess the next version
 
 
 [tool.black]
-target-version = ["py39", "py310", "py311"]
+target-version = ["py39", "py310", "py311", "py312"]
 preview = true
 
 [tool.isort]
@@ -55,7 +55,6 @@ known_first_party = ["burst_db"]
 [tool.mypy]
 python_version = "3.9"
 ignore_missing_imports = true
-plugins = ["pydantic.mypy"]
 
 
 # [tool.pydocstyle]
@@ -63,5 +62,5 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 doctest_optionflags = "NORMALIZE_WHITESPACE NUMBER"
-addopts = " -n auto --maxprocesses=8 --doctest-modules --randomly-seed=1234 --ignore=scripts --ignore=docs --ignore=data"
+addopts = " --doctest-modules --randomly-seed=1234 --ignore=scripts --ignore=docs --ignore=data"
 filterwarnings = ["error"]

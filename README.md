@@ -1,15 +1,15 @@
 # Burst_DB
-Sentinel-1 Burst Coverage Database for OPERA SAS
+Sentinel-1 Burst and Frame Databases for OPERA CSLC-S1/DISP-S1
 
 🚨 This toolbox is still in pre-alpha stage and undergoing rapid development. 🚨
 
-## How to install
+## Installation
 Follow the steps below to install `burst_db` using conda environment.
 
 1. Download source code:
 
 ```bash
-git clone https://github.com/opera-adt/burst_db burst_db
+git clone https://github.com/opera-adt/burst_db
 cd burst_db
 ```
 
@@ -19,14 +19,17 @@ cd burst_db
 conda install --name burst_db -c conda-forge --file environment.yml
 ```
 
-3. Install `burst_db` via pip:
+3. Install via pip:
 
 ```bash
 # run "pip install -e" to install in development mode
 python -m pip install .
 ```
 
-## How to use
+## Usage
+
+Installing the package creates the `opera-db` command line tool:
+
 `build_database.py` provides CLI to provide the input / output files and settings for the bounding box calculation. Below is the usage of the program.
 
 >build_database.py [-h] [-mxy MXY MXY] [-sxy SXY SXY] [-d DEPLOYABLE] sqlite_path_in sqlite_path_out
