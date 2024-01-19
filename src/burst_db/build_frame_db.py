@@ -19,6 +19,7 @@ from . import frames
 from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
 from ._land_usgs import GREENLAND_URL, USGS_LAND_URL, get_greenland_shape, get_land_df
 from ._opera_north_america import get_opera_na_shape
+from .create_2d_geojsons import create_2d_geojsons
 from .utils import write_zipped_json
 
 # Threshold to use EPSG:3413, Sea Ice Polar North (https://epsg.io/3413)
@@ -131,7 +132,8 @@ def make_frame_table(outfile: str):
         )
 
         # Aggregates burst geometries for each frame into one
-        con.execute("""INSERT INTO frames(fid, is_land, geom)
+        con.execute(
+            """INSERT INTO frames(fid, is_land, geom)
             SELECT fb.frame_fid as fid,
                     fb.is_land,
                     ST_UnaryUnion(ST_Collect(geom)) as geom
@@ -140,7 +142,8 @@ def make_frame_table(outfile: str):
                 frames_bursts fb
                 ON b.ogc_fid = fb.burst_ogc_fid
             GROUP BY 1;
-        """)
+        """
+        )
         print("Creating indexes and spatial index...")
         con.execute("CREATE INDEX IF NOT EXISTS idx_frames_fid ON frames (fid)")
         con.execute("SELECT gpkgAddSpatialIndex('frames', 'geom') ;")
@@ -150,7 +153,8 @@ def make_frame_table(outfile: str):
         )
         # Set the relative_orbit_number as the most common value for each frame
         con.execute("ALTER TABLE frames ADD COLUMN relative_orbit_number INTEGER;")
-        con.execute("""WITH frame_tracks AS (
+        con.execute(
+            """WITH frame_tracks AS (
                 SELECT f.fid,
                     CAST(ROUND(AVG(b.relative_orbit_number))
                          AS INTEGER) AS relative_orbit_number
@@ -161,10 +165,12 @@ def make_frame_table(outfile: str):
             ) UPDATE frames SET relative_orbit_number = frame_tracks.relative_orbit_number
             FROM frame_tracks
             WHERE frames.fid = frame_tracks.fid;
-            """)
+            """
+        )
         # Set the orbit_pass as the value from the first burst
         con.execute("ALTER TABLE frames ADD COLUMN orbit_pass TEXT;")
-        con.execute("""WITH op AS
+        con.execute(
+            """WITH op AS
                 (SELECT f.fid,
                         b.orbit_pass
                 FROM frames f
@@ -178,7 +184,8 @@ def make_frame_table(outfile: str):
             UPDATE frames SET orbit_pass = frame_orbits.orbit_pass
             FROM frame_orbits
             WHERE frames.fid = frame_orbits.fid;
-            """)
+            """
+        )
 
         # Drop the is_land from the frames_bursts table
         con.execute("ALTER TABLE frames_bursts DROP COLUMN is_land;")
@@ -431,9 +438,7 @@ WHERE burst_id_map.OGC_FID = bboxes.OGC_FID ;
 def make_minimal_db(db_path, df_frame_to_burst_id, output_path):
     """Make a minimal database with only the following columns:
 
-    burst_id_jpl, epsg, xmin, ymin, ymax, ymax, frame_ids
-    and a zip file with:
-    {burst_id_jpl: (epsg, xmin, ymin, ymax, ymax, frame_ids),...}
+    OGC_FID, burst_id_jpl, epsg, xmin, ymin, ymax, ymax
     """
     with sqlite3.connect(db_path) as con:
         df = pd.read_sql_query(
@@ -682,8 +687,7 @@ def create(
 
     # Make the minimal version of the DB
     ext = Path(outfile).suffix
-    out_minimal = outfile.replace(ext, f"-bbox-only{ext}")
-    out_burst_to_frame = outfile.replace(ext, "-burst-to-frame.json")
+    out_minimal = "opera-burst-bbox-only.sqlite3"
     print(f"Creating a epsg/bbox only version: {out_minimal}")
     df_minimal = make_minimal_db(
         db_path=outfile,
@@ -698,6 +702,7 @@ def create(
     # Create the two JSON mappings:
     # from frame id -> [burst Ids]
     # and burst id -> [frame Ids]
+    out_burst_to_frame = outfile.replace(ext, "-burst-to-frame.json")
     make_burst_to_frame_json(
         df_minimal, output_path=out_burst_to_frame, metadata=metadata
     )
@@ -710,5 +715,9 @@ def create(
     # Add metadata to each
     create_metadata_table(outfile, metadata=metadata)
     create_metadata_table(out_minimal, metadata=metadata)
+
+    # Make the geojson simplified versions
+    output_geojsons = create_2d_geojsons(outfile)
+    print(f"Created geojsons: {output_geojsons}")
 
     print(f"Total time: {time.time() - t0:.2f} seconds")
