@@ -12,4 +12,5 @@ dependencies:
 - shapely
 - tqdm
 - utm
-- unzip-http
+- pip:
+  - unzip-http
