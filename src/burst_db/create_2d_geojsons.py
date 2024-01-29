@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+
 from burst_db import __version__
 
 
