@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+
 from burst_db import __version__
 
 
@@ -37,7 +38,8 @@ def create_2d_geojsons(in_file: str = "opera-s1-disp.gpkg") -> list[Path]:
         )
         for table_name in ["burst_id_map", "frames_bursts"]:
             subprocess.run(
-                f'ogr2ogr -append -nln {table_name} -dialect sqlite -sql "SELECT * from {table_name}" "{db_file_2d}" "{in_file}"',
+                f'ogr2ogr -append -nln {table_name} -dialect sqlite -sql "SELECT * from'
+                f' {table_name}" "{db_file_2d}" "{in_file}"',
                 shell=True,
                 check=True,
             )
@@ -74,7 +76,10 @@ WHERE is_land=1;
     ]:
         json_file = f"{name}-{version_clean}.geojson"
         zip_file = f"{json_file}.zip"
-        cmd = f'ogr2ogr -f GeoJSON -dialect sqlite -sql "{query}" "{json_file}" {db_file_2d}'
+        cmd = (
+            f'ogr2ogr -f GeoJSON -preserve_fid -dialect sqlite -sql "{query}"'
+            f' "{json_file}" {db_file_2d}'
+        )
         print(cmd)
         subprocess.run(
             cmd,
