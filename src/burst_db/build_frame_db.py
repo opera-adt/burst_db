@@ -13,7 +13,7 @@ from shapely import GeometryType, STRtree
 from shapely.affinity import translate
 from tqdm.auto import tqdm
 
-from burst_db import __version__
+from burst_db import VERSION_CLEAN, __version__
 
 from . import frames
 from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
@@ -132,8 +132,7 @@ def make_frame_table(outfile: str):
         )
 
         # Aggregates burst geometries for each frame into one
-        con.execute(
-            """INSERT INTO frames(fid, is_land, geom)
+        con.execute("""INSERT INTO frames(fid, is_land, geom)
             SELECT fb.frame_fid as fid,
                     fb.is_land,
                     ST_UnaryUnion(ST_Collect(geom)) as geom
@@ -142,8 +141,7 @@ def make_frame_table(outfile: str):
                 frames_bursts fb
                 ON b.ogc_fid = fb.burst_ogc_fid
             GROUP BY 1;
-        """
-        )
+        """)
         print("Creating indexes and spatial index...")
         con.execute("CREATE INDEX IF NOT EXISTS idx_frames_fid ON frames (fid)")
         con.execute("SELECT gpkgAddSpatialIndex('frames', 'geom') ;")
@@ -153,8 +151,7 @@ def make_frame_table(outfile: str):
         )
         # Set the relative_orbit_number as the most common value for each frame
         con.execute("ALTER TABLE frames ADD COLUMN relative_orbit_number INTEGER;")
-        con.execute(
-            """WITH frame_tracks AS (
+        con.execute("""WITH frame_tracks AS (
                 SELECT f.fid,
                     CAST(ROUND(AVG(b.relative_orbit_number))
                          AS INTEGER) AS relative_orbit_number
@@ -165,12 +162,10 @@ def make_frame_table(outfile: str):
             ) UPDATE frames SET relative_orbit_number = frame_tracks.relative_orbit_number
             FROM frame_tracks
             WHERE frames.fid = frame_tracks.fid;
-            """
-        )
+            """)
         # Set the orbit_pass as the value from the first burst
         con.execute("ALTER TABLE frames ADD COLUMN orbit_pass TEXT;")
-        con.execute(
-            """WITH op AS
+        con.execute("""WITH op AS
                 (SELECT f.fid,
                         b.orbit_pass
                 FROM frames f
@@ -184,8 +179,7 @@ def make_frame_table(outfile: str):
             UPDATE frames SET orbit_pass = frame_orbits.orbit_pass
             FROM frame_orbits
             WHERE frames.fid = frame_orbits.fid;
-            """
-        )
+            """)
 
         # Drop the is_land from the frames_bursts table
         con.execute("ALTER TABLE frames_bursts DROP COLUMN is_land;")
@@ -589,7 +583,9 @@ def create_metadata_table(db_path, metadata):
     default=10,
     help="(If using `--optimize-land`): Maximum number of bursts per frame.",
 )
-@click.option("--outfile", default="opera-s1-disp.gpkg", help="Output file name")
+@click.option(
+    "--outfile", default=f"opera-s1-disp-{VERSION_CLEAN}.gpkg", help="Output file name"
+)
 @click.option(
     "--land-buffer-deg",
     default=0.3,
@@ -702,12 +698,12 @@ def create(
     # Create the two JSON mappings:
     # from frame id -> [burst Ids]
     # and burst id -> [frame Ids]
-    out_burst_to_frame = outfile.replace(ext, "-burst-to-frame.json")
+    out_burst_to_frame = outfile.replace(ext, f"-burst-to-frame-{VERSION_CLEAN}.json")
     make_burst_to_frame_json(
         df_minimal, output_path=out_burst_to_frame, metadata=metadata
     )
 
-    out_frame_to_burst = outfile.replace(ext, "-frame-to-burst.json")
+    out_frame_to_burst = outfile.replace(ext, f"-frame-to-burst-{VERSION_CLEAN}.json")
     make_frame_to_burst_json(
         db_path=outfile, output_path=out_frame_to_burst, metadata=metadata
     )
