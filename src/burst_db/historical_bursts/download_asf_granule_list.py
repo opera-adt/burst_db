@@ -3,6 +3,7 @@
 
 Uses the STAC catalog run by CMR at https://cmr.earthdata.nasa.gov/cloudstac/ASF/
 """
+
 from __future__ import annotations
 
 import argparse
@@ -40,9 +41,12 @@ class StacSearch:
     @backoff.on_exception(backoff.expo, Exception, max_tries=3)
     @staticmethod
     def get_safes_by_date(
-        date: datetime.date, missions=["A", "B"], verbose=False
+        date: datetime.date,
+        missions=["A", "B"],
+        allowed_pols=("SDV", "SDH", "SSV", "SSH"),
+        verbose=False,
     ) -> list[str]:
-        """Get the list of (VV, IW) SAFEs acquired on one date."""
+        """Get the list of IW SAFEs acquired on one date."""
         # sub catalog per date
         date_list_url = "https://cmr.earthdata.nasa.gov/cloudstac/ASF/collections/SENTINEL-1{sat}_SLC.v1/{date_str}"  # noqa
 
@@ -69,7 +73,7 @@ class StacSearch:
                 if s[4:6] != "IW":
                     continue
                 # Only save VV (so SDV or SSV)
-                if s[15] != "V":
+                if s[13:16] in allowed_pols:
                     continue
                 safe_names.append(s)
 
