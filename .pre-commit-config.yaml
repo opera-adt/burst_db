@@ -3,7 +3,7 @@ ci:
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: "v4.5.0"
+    rev: "v4.6.0"
     hooks:
       # https://github.com/pre-commit/pre-commit-hooks/issues/718
       # - id: check-added-large-files  # Fails with git v1.8.3
@@ -20,13 +20,13 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/psf/black
-    rev: "23.12.1"
+    rev: "24.4.2"
     hooks:
       - id: black
       - id: black-jupyter
 
   - repo: https://github.com/PyCQA/flake8
-    rev: "7.0.0"
+    rev: "7.1.0"
     hooks:
       - id: flake8
 
@@ -36,7 +36,7 @@ repos:
       - id: isort
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: "v1.8.0"
+    rev: "v1.10.1"
     hooks:
       - id: mypy
         additional_dependencies:
