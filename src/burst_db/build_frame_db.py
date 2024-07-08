@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import datetime
+import logging
 import sqlite3
 import time
 from pathlib import Path
@@ -20,7 +21,7 @@ from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
 from ._land_usgs import GREENLAND_URL, USGS_LAND_URL, get_greenland_shape, get_land_df
 from ._opera_north_america import get_opera_na_shape
 from .create_2d_geojsons import create_2d_geojsons
-from .utils import write_zipped_json
+from .utils import log_runtime, write_zipped_json
 
 # Threshold to use EPSG:3413, Sea Ice Polar North (https://epsg.io/3413)
 NORTH_THRESHOLD = 75
@@ -28,6 +29,12 @@ NORTH_EPSG = 3413
 # Threshold to use EPSG:3031, Antarctic Polar Stereographic (https://epsg.io/3031)
 SOUTH_THRESHOLD = -60
 SOUTH_EPSG = 3031
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    handlers=[logging.StreamHandler()],
+    format="[%(levelname)s|%(module)s|L%(lineno)d] %(asctime)s: %(message)s",
+    level=logging.INFO,
+)
 
 
 def make_jpl_burst_id(df: pd.DataFrame):
@@ -56,6 +63,7 @@ def _setup_spatialite_con(con: sqlite3.Connection):
     con.execute("SELECT EnableGpkgAmphibiousMode();")
 
 
+@log_runtime
 def make_burst_triplets(df_burst: pd.DataFrame) -> pd.DataFrame:
     """Make a burst triplets dataframe, aggregating IW1,2,3 from the burst dataframe."""
 
@@ -85,6 +93,7 @@ def make_burst_triplets(df_burst: pd.DataFrame) -> pd.DataFrame:
     return df_burst_triplet
 
 
+@log_runtime
 def get_land_indicator(gdf: gpd.GeoDataFrame, land_geom: GeometryType.POLYGON):
     """Get a boolean array indicating if each row of `gdf` intersects `land_geom`."""
     tree = STRtree(gdf.geometry)
@@ -95,6 +104,7 @@ def get_land_indicator(gdf: gpd.GeoDataFrame, land_geom: GeometryType.POLYGON):
     return is_in_land
 
 
+@log_runtime
 def make_frame_to_burst_table(outfile: str, df_frame_to_burst_id: pd.DataFrame):
     """Create the frames_bursts table and indexes."""
     with sqlite3.connect(outfile) as con:
@@ -115,6 +125,7 @@ def make_frame_to_burst_table(outfile: str, df_frame_to_burst_id: pd.DataFrame):
         )
 
 
+@log_runtime
 def make_frame_table(outfile: str):
     """Create the frames table and indexes."""
     with sqlite3.connect(outfile) as con:
@@ -132,7 +143,8 @@ def make_frame_table(outfile: str):
         )
 
         # Aggregates burst geometries for each frame into one
-        con.execute("""INSERT INTO frames(fid, is_land, geom)
+        con.execute(
+            """INSERT INTO frames(fid, is_land, geom)
             SELECT fb.frame_fid as fid,
                     fb.is_land,
                     ST_UnaryUnion(ST_Collect(geom)) as geom
@@ -141,8 +153,9 @@ def make_frame_table(outfile: str):
                 frames_bursts fb
                 ON b.ogc_fid = fb.burst_ogc_fid
             GROUP BY 1;
-        """)
-        print("Creating indexes and spatial index...")
+        """
+        )
+        logger.info("Creating indexes and spatial index...")
         con.execute("CREATE INDEX IF NOT EXISTS idx_frames_fid ON frames (fid)")
         con.execute("SELECT gpkgAddSpatialIndex('frames', 'geom') ;")
         # Extra thing so that QGIS recognizes "frames" better
@@ -151,7 +164,8 @@ def make_frame_table(outfile: str):
         )
         # Set the relative_orbit_number as the most common value for each frame
         con.execute("ALTER TABLE frames ADD COLUMN relative_orbit_number INTEGER;")
-        con.execute("""WITH frame_tracks AS (
+        con.execute(
+            """WITH frame_tracks AS (
                 SELECT f.fid,
                     CAST(ROUND(AVG(b.relative_orbit_number))
                          AS INTEGER) AS relative_orbit_number
@@ -162,10 +176,12 @@ def make_frame_table(outfile: str):
             ) UPDATE frames SET relative_orbit_number = frame_tracks.relative_orbit_number
             FROM frame_tracks
             WHERE frames.fid = frame_tracks.fid;
-            """)
+            """
+        )
         # Set the orbit_pass as the value from the first burst
         con.execute("ALTER TABLE frames ADD COLUMN orbit_pass TEXT;")
-        con.execute("""WITH op AS
+        con.execute(
+            """WITH op AS
                 (SELECT f.fid,
                         b.orbit_pass
                 FROM frames f
@@ -179,12 +195,14 @@ def make_frame_table(outfile: str):
             UPDATE frames SET orbit_pass = frame_orbits.orbit_pass
             FROM frame_orbits
             WHERE frames.fid = frame_orbits.fid;
-            """)
+            """
+        )
 
         # Drop the is_land from the frames_bursts table
         con.execute("ALTER TABLE frames_bursts DROP COLUMN is_land;")
 
 
+@log_runtime
 def get_epsg_codes(df: gpd.GeoDataFrame):
     """Get the EPSG codes for all non-antimeridian polygons in a GeoDataFrame.
 
@@ -245,7 +263,7 @@ def get_epsg_codes(df: gpd.GeoDataFrame):
     # Set all Greenland frames to EPSG:3413
     geom_greenland = get_greenland_shape()
     is_in_greenland = get_land_indicator(df, geom_greenland)
-    print(
+    logger.info(
         f"{is_in_greenland.sum()} frames are in Greenland. Setting to EPSG:{NORTH_EPSG}"
     )
     epsgs[is_in_greenland] = NORTH_EPSG
@@ -301,6 +319,7 @@ def antimeridian_epsg(mp):
     return base + zone_addition
 
 
+@log_runtime
 def update_burst_epsg(outfile):
     """Update the EPSG of each burst to match the EPSG of the frame it is in."""
     with sqlite3.connect(outfile) as con:
@@ -311,7 +330,7 @@ def update_burst_epsg(outfile):
             " (burst_id_jpl)"
         )
         # Set the EPSG on every burst from the frames
-        print("Updating burst EPSGs to match frames...")
+        logger.info("Updating burst EPSGs to match frames...")
         sql = """WITH burst_epsgs AS (
                     SELECT b.OGC_FID,
                         f.epsg
@@ -329,6 +348,7 @@ def update_burst_epsg(outfile):
         con.execute(sql)
 
 
+@log_runtime
 def add_gpkg_spatial_ref_sys(outfile):
     """Add all EPSG codes to the gpkg_spatial_ref_sys table."""
     north_hemi_utm = list(range(32601, 32661))
@@ -390,24 +410,29 @@ def add_gpkg_spatial_ref_sys(outfile):
         con.execute(sql)
 
 
-def save_utm_bounding_boxes(outfile, *, margin: float, snap: float):
+@log_runtime
+def save_utm_bounding_boxes(
+    outfile, *, table: str, id_column: str, margin: float, snap: float
+):
     """Save the bounding boxes of each burst in UTM coordinates."""
-    print("Saving UTM bounding boxes...")
+    logger.info("Saving UTM bounding boxes...")
     try:
         with sqlite3.connect(outfile) as con:
             for col in ["xmin", "ymin", "xmax", "ymax"]:
-                con.execute(f"ALTER TABLE burst_id_map ADD COLUMN {col} INTEGER;")
+                con.execute(f"ALTER TABLE {table} ADD COLUMN {col} INTEGER;")
     except sqlite3.OperationalError:
         # Already exists
         pass
 
+    # - Transform the geometry from 4326 (lat/lon) to the UTM EPSG
+    # - get the bounding box using "envelope" as the min/max coords
     sql = f"""
-WITH transformed(g, OGC_FID) AS
-  (SELECT ST_Envelope(ST_Transform(geom, epsg)) g,
-          OGC_FID
-   FROM burst_id_map
+WITH transformed(g, {id_column}) AS
+  (SELECT ST_Envelope(ST_Transform(geom, CAST(epsg as INTEGER))) g,
+          {id_column}
+   FROM {table}
    WHERE epsg != 0 )
-UPDATE burst_id_map
+UPDATE {table}
 SET (xmin,
      ymin,
      xmax,
@@ -416,19 +441,21 @@ SET (xmin,
               bboxes.xmax,
               bboxes.ymax)
 FROM
-  (SELECT OGC_FID,
+  (SELECT {id_column},
           FLOOR((ST_MinX(g) - {margin}) / {snap:.1f}) * {snap:.1f} AS xmin,
           FLOOR((ST_MinY(g) - {margin}) / {snap:.1f}) * {snap:.1f} AS ymin,
           CEIL((ST_MaxX(g) + {margin}) / {snap:.1f}) * {snap:.1f} AS xmax,
           CEIL((ST_MaxY(g) + {margin}) / {snap:.1f}) * {snap:.1f} AS ymax
    FROM transformed) AS bboxes
-WHERE burst_id_map.OGC_FID = bboxes.OGC_FID ;
+WHERE {table}.{id_column} = bboxes.{id_column} ;
     """
+    logger.info(sql)
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
         con.execute(sql)
 
 
+@log_runtime
 def make_minimal_db(db_path, df_frame_to_burst_id, output_path):
     """Make a minimal database with only the following columns:
 
@@ -458,6 +485,7 @@ def make_minimal_db(db_path, df_frame_to_burst_id, output_path):
     return df_out
 
 
+@log_runtime
 def make_burst_to_frame_json(df, output_path: str, metadata: dict):
     data_dict = (
         df.set_index("burst_id_jpl")[["frame_fid"]]
@@ -469,6 +497,7 @@ def make_burst_to_frame_json(df, output_path: str, metadata: dict):
     write_zipped_json(output_path, dict_out)
 
 
+@log_runtime
 def make_frame_to_burst_json(db_path: str, output_path: str, metadata: dict):
     with sqlite3.connect(db_path) as con:
         df_frame_to_burst = pd.read_sql_query(
@@ -478,10 +507,10 @@ def make_frame_to_burst_json(db_path: str, output_path: str, metadata: dict):
                 f.epsg,
                 f.is_land,
                 f.is_north_america,
-                MIN(xmin) AS xmin,
-                MIN(ymin) AS ymin,
-                MAX(xmax) AS xmax,
-                MAX(ymax) AS ymax,
+                f.xmin,
+                f.ymin,
+                f.xmax,
+                f.ymax,
                 GROUP_CONCAT(burst_id_jpl) AS burst_ids
             FROM frames f
             JOIN frames_bursts fb ON fb.frame_fid = f.fid
@@ -607,37 +636,37 @@ def create(
 
     # Read ESA's Burst Data
     if not Path(esa_db_path).exists():
-        print(f"Downloading {ESA_DB_URL} to {esa_db_path}...")
+        logger.info(f"Downloading {ESA_DB_URL} to {esa_db_path}...")
         get_esa_burst_db(esa_db_path)
 
-    print("Loading burst data...")
+    logger.info("Loading burst data...")
     sql = "SELECT * FROM burst_id_map"
     with sqlite3.connect(esa_db_path) as con:
         df_burst = gpd.GeoDataFrame.from_postgis(
             sql, con, geom_col="GEOMETRY", crs="EPSG:4326"
         ).rename_geometry("geom")
 
-    print("Forming string JPL id")
+    logger.info("Forming string JPL id")
     jpl_ids = make_jpl_burst_id(df_burst)
     df_burst.loc[:, "burst_id_jpl"] = jpl_ids
     # placeholder to compute later
     df_burst.loc[:, "epsg"] = 0
 
     # Start the outfile with the ESA database contents
-    print("Saving initial version of `burst_id_map` table")
+    logger.info("Saving initial version of `burst_id_map` table")
     df_burst.set_index("OGC_FID").to_file(
         outfile, driver="GPKG", layer="burst_id_map", index=False
     )
     # Adjust the primary key so it still matches original OGC_FID
-    print("Renaming index column from 'fid' to 'OGC_FID'")
+    logger.info("Renaming index column from 'fid' to 'OGC_FID'")
     with sqlite3.connect(outfile) as con:
         con.execute("ALTER TABLE burst_id_map RENAME COLUMN fid TO OGC_FID;")
 
-    print("Aggregating burst triplets (grouping IW1,2,3 geometries together)")
+    logger.info("Aggregating burst triplets (grouping IW1,2,3 geometries together)")
     df_burst_triplet = make_burst_triplets(df_burst)
 
     # Get the land polygon to intersect
-    print("Indicating which burst triplets are near land...")
+    logger.info("Indicating which burst triplets are near land...")
     df_land = get_land_df(land_buffer_deg)
     land_geom = df_land.geometry
 
@@ -645,7 +674,7 @@ def create(
 
     # Create frames and JOIN tables
     # Make the JOIN table first
-    print("Defining frames - bursts JOIN table")
+    logger.info("Defining frames - bursts JOIN table")
     df_frame_to_burst_id = frames.create_frame_to_burst_mapping(
         is_in_land,
         target_frame=target_frame,
@@ -656,35 +685,41 @@ def create(
     make_frame_to_burst_table(outfile, df_frame_to_burst_id)
 
     # make the "frames" table
-    print("Making frames table by aggregating burst geometries...")
+    logger.info("Making frames table by aggregating burst geometries...")
     make_frame_table(outfile)
     df_frames = gpd.read_file(outfile, layer="frames")
 
-    print("Computing EPSG codes for each frame...")
+    logger.info("Computing EPSG codes for each frame...")
     epsgs = get_epsg_codes(df_frames)
-    df_frames.loc[:, "epsg"] = epsgs
+    df_frames.loc[:, "epsg"] = pd.to_numeric(epsgs, errors="coerce")
 
     # Mark the ones in north america in the OPERA region of interest
     geom_north_america = get_opera_na_shape()
     is_in_north_america = get_land_indicator(df_frames, geom_north_america)
     df_frames.loc[:, "is_north_america"] = is_in_north_america
 
-    print("Final number of frames:", len(df_frames))
-    print("Number intersecting land:", is_in_land.sum())
-    print("Number in North America:", is_in_north_america.sum())
-    print("Saving frames...")
+    logger.info("Final number of frames: %s", len(df_frames))
+    logger.info("Number intersecting land: %s", is_in_land.sum())
+    logger.info("Number in North America: %s", is_in_north_america.sum())
+    logger.info("Saving frames...")
+    df_frames["epsg"] = df_frames["epsg"].astype("int")
     df_frames.to_file(outfile, driver="GPKG", layer="frames")
 
     update_burst_epsg(outfile)
 
     # Create the bounding box in UTM coordinates
     add_gpkg_spatial_ref_sys(outfile)
-    save_utm_bounding_boxes(outfile, margin=margin, snap=snap)
+    save_utm_bounding_boxes(
+        outfile, table="burst_id_map", id_column="OGC_FID", margin=margin, snap=snap
+    )
+    save_utm_bounding_boxes(
+        outfile, table="frames", id_column="fid", margin=margin, snap=snap
+    )
 
     # Make the minimal version of the DB
     ext = Path(outfile).suffix
     out_minimal = "opera-burst-bbox-only.sqlite3"
-    print(f"Creating a epsg/bbox only version: {out_minimal}")
+    logger.info(f"Creating a epsg/bbox only version: {out_minimal}")
     df_minimal = make_minimal_db(
         db_path=outfile,
         df_frame_to_burst_id=df_frame_to_burst_id,
@@ -698,12 +733,12 @@ def create(
     # Create the two JSON mappings:
     # from frame id -> [burst Ids]
     # and burst id -> [frame Ids]
-    out_burst_to_frame = outfile.replace(ext, f"-burst-to-frame-{VERSION_CLEAN}.json")
+    out_burst_to_frame = outfile.replace(ext, "-burst-to-frame.json")
     make_burst_to_frame_json(
         df_minimal, output_path=out_burst_to_frame, metadata=metadata
     )
 
-    out_frame_to_burst = outfile.replace(ext, f"-frame-to-burst-{VERSION_CLEAN}.json")
+    out_frame_to_burst = outfile.replace(ext, "-frame-to-burst.json")
     make_frame_to_burst_json(
         db_path=outfile, output_path=out_frame_to_burst, metadata=metadata
     )
@@ -714,6 +749,6 @@ def create(
 
     # Make the geojson simplified versions
     output_geojsons = create_2d_geojsons(outfile)
-    print(f"Created geojsons: {output_geojsons}")
+    logger.info(f"Created geojsons: {output_geojsons}")
 
-    print(f"Total time: {time.time() - t0:.2f} seconds")
+    logger.info(f"Total time: {time.time() - t0:.2f} seconds")
