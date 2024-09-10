@@ -16,8 +16,7 @@ MaybeBbox = Optional[Bbox]
 
 
 def query_database(frame_id: int, db_path: Path) -> dict:
-    """
-    Query the geopackage database with the provided frame ID.
+    """Query the geopackage database with the provided frame ID.
 
     Parameters
     ----------

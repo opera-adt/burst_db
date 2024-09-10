@@ -13,7 +13,7 @@ import zipfile
 from dataclasses import astuple, dataclass
 from functools import cache
 from pathlib import Path
-from typing import ClassVar, Sequence
+from typing import ClassVar, Optional, Sequence
 
 import boto3
 import lxml.etree as ET
@@ -109,6 +109,7 @@ class S1BurstId:
         ----------
         ESA Sentinel-1 Level 1 Detailed Algorithm Definition
         https://sentinels.copernicus.eu/documents/247904/1877131/S1-TN-MDA-52-7445_Sentinel-1+Level+1+Detailed+Algorithm+Definition_v2-4.pdf/83624863-6429-cfb8-2371-5c5ca82907b8
+
         """
         swath_num = int(subswath[-1])
         # Since we only have access to the current subswath, we need to use the
@@ -171,6 +172,7 @@ class S1BurstId:
         -------
         S1BurstId
             The burst ID object containing track number + ESA's burstId number + swath ID.
+
         """
         track_number, esa_burst_id, subswath = burst_id_str.split("_")
         return cls(int(track_number[1:]), int(esa_burst_id), subswath.lower())
@@ -236,7 +238,7 @@ def _get_manifest_pattern(tree: ET, keys: list):
 
 
 def get_start_end_track(tree: ET):
-    """Extract the start/end relative orbits from manifest.safe file"""
+    """Extract the start/end relative orbits from manifest.safe file."""
     search_term, nsmap = _get_manifest_pattern(
         tree, ["orbitReference", "relativeOrbitNumber"]
     )
@@ -247,8 +249,8 @@ def get_start_end_track(tree: ET):
 def _bursts_from_xml(annotation_path: str, orbit_path: str, open_method=open):
     """Parse bursts in Sentinel-1 annotation XML.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     annotation_path : str
         Path to Sentinel-1 annotation XML file of specific subswath and
         polarization.
@@ -257,10 +259,11 @@ def _bursts_from_xml(annotation_path: str, orbit_path: str, open_method=open):
     open_method : function
         Function used to open annotation file.
 
-    Returns:
-    --------
+    Returns
+    -------
     bursts : list
         List of Sentinel1BurstSlc objects found in annotation XML.
+
     """
     _, tail = os.path.split(annotation_path)
     platform_id, subswath, _, pol = [x.upper() for x in tail.split("-")[:4]]
@@ -362,8 +365,7 @@ def _bursts_from_xml(annotation_path: str, orbit_path: str, open_method=open):
 
 @cache
 def get_osv_list_from_orbit(orbit_file: str):
-    """
-    Get the orbit state vectors as ET objects from `orbit_file`.
+    """Get the orbit state vectors as ET objects from `orbit_file`.
 
     Parameters
     ----------
@@ -374,6 +376,7 @@ def get_osv_list_from_orbit(orbit_file: str):
     -------
     orbit_state_vector_list: ET
         Orbit state vector list
+
     """
     orbit_tree = ET.parse(orbit_file)
     orbit_state_vector_list = orbit_tree.find("Data_Block/List_of_OSVs")
@@ -381,8 +384,7 @@ def get_osv_list_from_orbit(orbit_file: str):
 
 
 def _get_utc_time_from_osv(osv):
-    """
-    Extract the UTC time from orbit state vector element in orbit file
+    """Extract the UTC time from orbit state vector element in orbit file.
 
     Parameters
     ----------
@@ -393,6 +395,7 @@ def _get_utc_time_from_osv(osv):
     -------
     datetime_utc: datetime.datetime
         Orbit state vector's UTC time
+
     """
     utc_osv_string = osv.find("UTC").text.replace("UTC=", "")
     return as_datetime(utc_osv_string)
@@ -401,15 +404,16 @@ def _get_utc_time_from_osv(osv):
 def _get_burst_bounds(tree):
     """Parse grid points list and get border.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     tree : Element
         Element containing geolocation grid points.
 
-    Returns:
-    --------
+    Returns
+    -------
     boundary_polys : list[MultiPolygon]
         List of burst boundaries as shapely MultiPolygons
+
     """
     # find element tree
     grid_pt_list = tree.find("geolocationGrid/geolocationGridPointList")
@@ -462,11 +466,10 @@ def _get_utc_z(orbit_state_vector_list):
 def get_ascending_node_time_orbit(
     orbit_state_vector_list: ET,
     sensing_time: datetime.datetime,
-    anx_time_annotation: datetime.datetime = None,
+    anx_time_annotation: Optional[datetime.datetime] = None,
     search_length=None,
 ):
-    """
-    Estimate the time of ascending node crossing from orbit
+    """Estimate the time of ascending node crossing from orbit.
 
     Parameters
     ----------
@@ -491,8 +494,8 @@ def get_ascending_node_time_orbit(
     -------
     _ : datetime.datetime
         Ascending node crossing time calculated from orbit
-    """
 
+    """
     # Crop the orbit information before 2 * (orbit period) of sensing time
     if search_length is None:
         search_length = datetime.timedelta(seconds=2 * T_ORBIT)
@@ -584,8 +587,8 @@ def check_dateline(poly):
          A list containing: the input polygon if it didn't cross
         the dateline, or two polygons otherwise (one on either
         side of the dateline).
-    """
 
+    """
     xmin, _, xmax, _ = poly.bounds
     # Check dateline crossing
     if (xmax - xmin) > 180.0:
@@ -611,7 +614,7 @@ def check_dateline(poly):
         # DEM longitude range
         for polygon_count in range(2):
             x, y = polys[polygon_count].exterior.coords.xy
-            if not any([k > 180 for k in x]):
+            if not any(k > 180 for k in x):
                 continue
 
             # Otherwise, wrap longitude values down to 360 deg
@@ -633,9 +636,9 @@ def unzip_safe(file_path: str | Path, output_directory: Path):
     with zipfile.ZipFile(file_path, "r") as zip_ref:
         # If the zip starts with "safe_folders/", then adjust extraction
         # get the number of parts in the `manifest`
-        manifest_parts = [
+        manifest_parts = next(
             Path(f).parts for f in zip_ref.namelist() if "manifest.safe" in f
-        ][0]
+        )
         manifest_level = len(manifest_parts)
 
         # Determine extraction logic based on contents
@@ -665,17 +668,18 @@ def bursts_from_safe_dir(
 ) -> list[S1Burst]:
     """Find S1Bursts in a Sentinel-1 SAFE structured directory/zipfile.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     path : str
         Path to SAFE directory.
     orbit_path : str
         Path the orbit file.
 
-    Returns:
-    --------
+    Returns
+    -------
     bursts : list
         List of Sentinel1BurstSlc objects found in annotation XML.
+
     """
 
     def _is_zip_annotation(path: str):
@@ -832,6 +836,7 @@ def _find_matching(search_term: str, full_safe_list: str | Path) -> list[str]:
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        check=False,
     )
     if out.returncode == 1:
         logger.error(f"Failed to grep {search_term}")
@@ -859,7 +864,7 @@ def _get_objects(
             s3_client.download_file(Bucket=bucket, Key=key, Filename=output_file)
         except ClientError as e:
             if "Not Found" in str(e):
-                logger.error(f"s3://{bucket}/{key} doesn't exist")
+                logger.exception(f"s3://{bucket}/{key} doesn't exist")
             else:
                 logger.error(f"Failed to download s3://{bucket}/{key}", exc_info=True)
             return None
@@ -1084,7 +1089,7 @@ def main() -> None:
 
     # TEMP: remove later. unzip the file if it exists
     if not args.full_safe_list and Path("all_cmr_stac_safes_sorted.txt.zip").exists():
-        subprocess.run(["unzip", "all_cmr_stac_safes_sorted.txt.zip"])
+        subprocess.run(["unzip", "all_cmr_stac_safes_sorted.txt.zip"], check=False)
         args.full_safe_list = Path("all_cmr_stac_safes_sorted.txt")
 
     # For each date, download the SAFE files

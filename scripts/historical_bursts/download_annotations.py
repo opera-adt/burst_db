@@ -36,7 +36,7 @@ logging.getLogger("asfsmd").setLevel(logging.WARNING)
 def download_safe_metadata(
     product_names: list[str],
     pol: str = "vv",
-    outdir: str | Path = Path("."),
+    outdir: str | Path = Path(),
     auth: Optional[Auth] = None,
     skip_if_exists: bool = True,
     skip_errors: bool = True,
@@ -58,6 +58,7 @@ def download_safe_metadata(
         Skip downloading if the output file already exists, by default True
     skip_errors : bool, optional
         Skip errors if they occur, by default True
+
     """
     # out_product = (Path(outdir) / product_name).with_suffix(".SAFE")
     out_products = [Path(outdir) / p for p in product_names]
@@ -75,21 +76,21 @@ def download_safe_metadata(
             remaining_products, pol=pol, outdir=Path(outdir), auth=auth
         )
     except Exception:
-        logger.error(f"Error downloading data from {remaining_products}")
+        logger.exception(f"Error downloading data from {remaining_products}")
         # Try once more
         time.sleep(20)
         try:
             _download_safe_metadata(
                 remaining_products, pol=pol, outdir=Path(outdir), auth=auth
             )
-        except Exception as e:
+        except Exception:
             logger.error(
                 f"Error downloading data from {remaining_products}", exc_info=True
             )
             if skip_errors:
                 return
             else:
-                raise e
+                raise
 
 
 # @backoff.on_exception(backoff.expo, Exception, max_tries=2)
@@ -97,7 +98,7 @@ def _download_safe_metadata(
     product_names: list[str],
     auth: Optional[Auth] = None,
     pol: str = "vv",
-    outdir: Path = Path("."),
+    outdir: Path = Path(),
 ):
     """Use `asfsmd` to get the SAFE metadata for a product."""
     patterns = make_patterns(pol=pol)
@@ -107,8 +108,7 @@ def _download_safe_metadata(
 def zip_and_upload(
     safe_dirs: list[Path], bucket_name: str, folder_name: str, remove_local: bool = True
 ):
-    """
-    Zips a list of safe_dirs and uploads the resulting zip file to S3.
+    """Zips a list of safe_dirs and uploads the resulting zip file to S3.
 
     Parameters
     ----------
@@ -124,8 +124,8 @@ def zip_and_upload(
     Returns
     -------
     None
-    """
 
+    """
     # Zip the safe_dirs
     # Create an S3 client
     s3 = boto3.client("s3")
