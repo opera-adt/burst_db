@@ -1,6 +1,7 @@
 import click
 
 from .build_frame_db import create
+from .create_cslc_burst_catalog import make_burst_catalog
 from .query_frame_db import intersect, lookup
 from .query_historical_bursts import fetch_bursts, fetch_granules
 
@@ -13,6 +14,7 @@ def cli_app():
 cli_app.add_command(create)
 cli_app.add_command(intersect)
 cli_app.add_command(lookup)
+cli_app.add_command(make_burst_catalog)
 
 
 @click.group()
