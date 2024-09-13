@@ -112,7 +112,7 @@ def create_denormalized_db(
 
     query = f".import --skip 1 {export_base_name}.csv bursts"
     cmd = f'sqlite3 -init /dev/null -csv {export_base_name}.sqlite3 "{query}"'
-    subprocess.run(cmd, shell=True)
+    subprocess.run(cmd, shell=True, check=False)
 
     query = (
         "CREATE INDEX idx_burst_id_jpl_sensing_time on bursts(burst_id_jpl,"
@@ -329,7 +329,7 @@ def get_bursts_over_north_america(
 
 
 def normalize():
-    all_csvs = list(Path(".").rglob("*.csv.zip"))
+    all_csvs = list(Path().rglob("*.csv.zip"))
 
     def _read_bursts(f):
         return pd.read_csv(

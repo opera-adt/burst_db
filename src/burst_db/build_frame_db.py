@@ -206,6 +206,7 @@ def get_epsg_codes(df: gpd.GeoDataFrame):
     References
     ----------
     .. _[1]: http://www.jaworski.ca/utmzones.htm
+
     """
 
     def _is_on_antimeridian(geom):
@@ -220,7 +221,7 @@ def get_epsg_codes(df: gpd.GeoDataFrame):
     # everything else
     # get the x, y (lon, lat) coords of all other rows
     other_coords = np.array(
-        df[~am_idxs].geometry.map(lambda g: tuple(g.centroid.coords)[0]).tolist()
+        df[~am_idxs].geometry.map(lambda g: next(iter(g.centroid.coords))).tolist()
     )
     xs, ys = other_coords.T
     ys_full_size = np.ones(len(epsgs)) * np.nan
@@ -281,10 +282,10 @@ def antimeridian_epsg(mp):
 
     Notes
     -----
-
     The EPSG code is calculated by taking the weighted average of the centroid of the
     polygons in the multipolygon. The centroid is weighted by the area of the polygon.
     The centroid is shifted by 360 degrees if it is in the western hemisphere.
+
     """
     y_c = mp.centroid.y
     # check north/south pole cases
@@ -346,7 +347,7 @@ def add_gpkg_spatial_ref_sys(outfile):
     """Add all EPSG codes to the gpkg_spatial_ref_sys table."""
     north_hemi_utm = list(range(32601, 32661))
     south_hemi_utm = list(range(32701, 32761))
-    epsgs = [SOUTH_EPSG, NORTH_EPSG, 4326] + north_hemi_utm + south_hemi_utm
+    epsgs = [SOUTH_EPSG, NORTH_EPSG, 4326, *north_hemi_utm, *south_hemi_utm]
     with sqlite3.connect(outfile) as con:
         _setup_spatialite_con(con)
         sql = "SELECT gpkgInsertEpsgSRID({epsg});"
@@ -522,6 +523,7 @@ def _get_burst_to_frame_list(df_frame_to_burst_id):
     containing the burst.
 
     Example:
+    -------
                 frame_fid
     burst_ogc_fid
     ...
@@ -530,6 +532,7 @@ def _get_burst_to_frame_list(df_frame_to_burst_id):
     26               [1, 2]
     27               [1, 2]
     28                  [2]
+
     """
     return (
         df_frame_to_burst_id[["burst_ogc_fid", "frame_fid"]]

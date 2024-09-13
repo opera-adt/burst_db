@@ -36,19 +36,21 @@ class StacSearch:
     start_date: datetime.date = datetime.date(2014, 10, 3)
     end_date: datetime.date = field(default_factory=datetime.date.today)
     max_workers: int = 10
-    output_dir: Path = Path(".")
+    output_dir: Path = Path()
 
     @backoff.on_exception(backoff.expo, Exception, max_tries=3)
     @staticmethod
     def get_safes_by_date(
         date: datetime.date,
-        missions=["A", "B"],
+        missions=None,
         allowed_pols=("SDV", "SDH", "SSV", "SSH"),
         verbose=False,
     ) -> list[str]:
         """Get the list of IW SAFEs acquired on one date."""
         # sub catalog per date
-        date_list_url = "https://cmr.earthdata.nasa.gov/cloudstac/ASF/collections/SENTINEL-1{sat}_SLC.v1/{date_str}"  # noqa
+        if missions is None:
+            missions = ["A", "B"]
+        date_list_url = "https://cmr.earthdata.nasa.gov/cloudstac/ASF/collections/SENTINEL-1{sat}_SLC.v1/{date_str}"
 
         safe_names = []
         for sat in missions:
@@ -63,7 +65,7 @@ class StacSearch:
                 continue
 
             for item in resp.json()["links"]:
-                if not item["rel"] == "item":
+                if item["rel"] != "item":
                     # e.g. 'self', 'root', 'parent'
                     continue
                 # Strip the -SLC, which we'll add in later.
@@ -83,7 +85,7 @@ class StacSearch:
     @staticmethod
     def get_safe_metadata(safe_name: str) -> tuple[str, str]:
         """Get the geojson WKT and concept ID for one SAFE granule."""
-        item_url = "https://cmr.earthdata.nasa.gov/stac/ASF/collections/SENTINEL-1{sat}_SLC.v1/items/{safe_name}-SLC"  # noqa
+        item_url = "https://cmr.earthdata.nasa.gov/stac/ASF/collections/SENTINEL-1{sat}_SLC.v1/items/{safe_name}-SLC"
         # example:
         # https://cmr.earthdata.nasa.gov/stac/ASF/collections/SENTINEL-1A_SLC.v1/items/S1A_IW_SLC__1SDV_20150302T000329_20150302T000356_004845_006086_51B0-SLC
         sat = "A" if safe_name.startswith("S1A") else "B"
@@ -95,17 +97,17 @@ class StacSearch:
 
         # Get the "Concept" url which has the S3 bucked
         # example: "https://cmr.earthdata.nasa.gov/search/concepts/G1345380785-ASF.json"
-        concept_url = [
+        concept_url = next(
             link["href"] for link in js["links"] if link["href"].endswith("-ASF.json")
-        ][0]
+        )
         concept_id = concept_url.split("/")[-1].replace(".json", "")
 
         return polygon.wkt, concept_id
 
-    def get_all_safe_names(
-        self, overwrite: bool = False, missions=["A", "B"]
-    ) -> list[Path]:
+    def get_all_safe_names(self, overwrite: bool = False, missions=None) -> list[Path]:
         """Grab the list of SAFE names for each date in parallel."""
+        if missions is None:
+            missions = ["A", "B"]
 
         def _save_save_list(date) -> Path:
             output_name = self.output_dir / f"safes-{date.strftime('%Y-%m-%d')}.txt"
@@ -128,7 +130,6 @@ class StacSearch:
 
 def main() -> None:
     """Download Sentinel-1 metadata from a WKT file."""
-
     parser = argparse.ArgumentParser(
         description="Download the available Sentinel-1 SAFE granules from ASF.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,

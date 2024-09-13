@@ -23,31 +23,17 @@ repos:
     rev: "24.8.0"
     hooks:
       - id: black
-      - id: black-jupyter
 
-  - repo: https://github.com/PyCQA/flake8
-    rev: "7.1.1"
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.3
     hooks:
-      - id: flake8
-
-  - repo: https://github.com/PyCQA/isort
-    rev: "5.13.2"
-    hooks:
-      - id: isort
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix, --show-fixes]
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: "v1.11.2"
     hooks:
       - id: mypy
         additional_dependencies:
-        - types-pkg_resources
-        - types-python-dateutil
+        - types-setuptools
         - types-requests
-
-  # - repo: https://github.com/PyCQA/pydocstyle
-  #   rev: "6.3.0"
-  #   hooks:
-  #     - id: pydocstyle
-  #       # https://github.com/PyCQA/pydocstyle/pull/608#issuecomment-1381168417
-  #       additional_dependencies: ['.[toml]']
-  #       exclude: tests

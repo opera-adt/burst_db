@@ -59,6 +59,7 @@ def get_asf_list(
     -------
     Path
         Path to the list of granules for the given date.
+
     """
     # Create the output directory
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -150,7 +151,6 @@ def _get_cli_args() -> argparse.Namespace:
 
 def main() -> Path:
     """Run the script to generate the list of bursts from a single date."""
-
     args = _get_cli_args()
     out_dir = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
