@@ -37,7 +37,7 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
         # The "Temporal Time" is the acquisition sensing time in the S1 filename
         conn.sql(
             f"""
-    CREATE TABLE raw_bursts AS
+    CREATE TABLE bursts AS
     SELECT
         LOWER(REPLACE(substring("# Granule ID", 18, 15), '-', '_')) AS burst_id_jpl,
         "Temporal Time"::TIMESTAMP AS sensing_time,
@@ -63,12 +63,12 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
             """
     CREATE TABLE bursts_with_frame_ids AS
     SELECT
-        rb.burst_id_jpl,
-        rb.sensing_time,
+        b.burst_id_jpl,
+        b.sensing_time,
         f.fid AS frame_id,
         f.is_north_america
-    FROM raw_bursts rb
-    JOIN opera.burst_id_map bm ON rb.burst_id_jpl = bm.burst_id_jpl
+    FROM bursts b
+    JOIN opera.burst_id_map bm ON b.burst_id_jpl = bm.burst_id_jpl
     JOIN opera.frames_bursts fb ON fb.burst_ogc_fid = bm.OGC_FID
     JOIN opera.frames f ON fb.frame_fid = f.fid
     """
