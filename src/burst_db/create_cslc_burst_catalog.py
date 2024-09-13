@@ -190,7 +190,12 @@ def make_consistent_burst_json(
                 for opt in rows_full:
                     writer.writerow(opt)
 
-        _ = thread_map(run_search, frame_ids, max_workers=4)
+        _ = thread_map(
+            run_search,
+            frame_ids,
+            max_workers=4,
+            desc="Finding consistent bursts per frame",
+        )
         query = f"""COPY (
             SELECT
                 *
