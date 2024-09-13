@@ -1,8 +1,6 @@
 # Burst_DB
 Sentinel-1 Burst and Frame Databases for OPERA CSLC-S1/DISP-S1
 
-🚨 This toolbox is still in pre-alpha stage and undergoing rapid development. 🚨
-
 ## Installation
 Follow the steps below to install `burst_db` using conda environment.
 
