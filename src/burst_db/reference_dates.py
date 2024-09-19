@@ -90,7 +90,7 @@ def calculate_reference_dates(
             if len(current_group) < min_acquisitions_per_batch:
                 logger.debug(
                     f"Frame {frame_id} has only {len(current_group)} acquisitions "
-                    f"in the last batch."
+                    "in the last batch."
                 )
 
         reference_dates[frame_id] = {
@@ -107,7 +107,13 @@ def calculate_reference_dates(
 
 @click.command()
 @click.argument("consistent_json_file", type=click.Path(exists=True))
-@click.argument("output_file", type=click.Path())
+@click.option(
+    "--output",
+    help=(
+        "Manually name the output JSON file. If, not given, defaults to"
+        " 'opera-disp-s1-consistent-burst-ids-{today}.json'"
+    ),
+)
 @click.option(
     "--interval",
     type=float,
@@ -124,7 +130,7 @@ def calculate_reference_dates(
 )
 def make_reference_dates(
     consistent_json_file,
-    output_file,
+    output,
     interval,
     min_acquisitions,
 ):
@@ -136,13 +142,21 @@ def make_reference_dates(
     reference_dates = calculate_reference_dates(
         consistent_json_file, interval, min_acquisitions
     )
+    if output is None:
+        today_str = datetime.today().strftime("%Y-%m-%d")
+        output_file = f"opera-disp-s1-reference-dates-{today_str}.json"
+        minimal_output_file = f"opera-disp-s1-reference-dates-minimal-{today_str}.json"
+    else:
+        output_file = output
+        minimal_output_file = output_file.replace(".json", "-minimal.json")
+
     with open(output_file, "w") as f:
         json.dump(reference_dates, f, indent=2)
-    click.echo(f"Reference dates JSON file created: {output_file}")
+    click.echo(f"Reference dates JSON with full sensing times created: {output_file}")
+
     minimal_version = {
         frame_id: data["reference_dates"] for frame_id, data in reference_dates.items()
     }
-    minimal_output_file = output_file.replace(".json", "-minimal.json")
     with open(minimal_output_file, "w") as f:
         json.dump(minimal_version, f, indent=2)
-    click.echo(f"minimal reference dates JSON file created: {minimal_output_file}")
+    click.echo(f"Minimal reference dates JSON file created: {minimal_output_file}")
