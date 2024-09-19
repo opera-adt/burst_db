@@ -77,6 +77,9 @@ def calculate_reference_dates(
                     current_group = []
                 elif is_event_date:
                     # Merge with previous group if not enough acquisitions
+                    # TODO: We need to spot check if this leads to a poor reference date
+                    # e.g. if there's an "event" in winter, in alaska. We don't want
+                    # to set the reference to winter.
                     if grouped_sensing_times:
                         grouped_sensing_times[-1].extend(current_group)
                     ref_dates[-1] = date
@@ -136,3 +139,10 @@ def make_reference_dates(
     with open(output_file, "w") as f:
         json.dump(reference_dates, f, indent=2)
     click.echo(f"Reference dates JSON file created: {output_file}")
+    minimal_version = {
+        frame_id: data["reference_dates"] for frame_id, data in reference_dates.items()
+    }
+    minimal_output_file = output_file.replace(".json", "-minimal.json")
+    with open(minimal_output_file, "w") as f:
+        json.dump(minimal_version, f, indent=2)
+    click.echo(f"minimal reference dates JSON file created: {minimal_output_file}")
