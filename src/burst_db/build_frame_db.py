@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import contextlib
 import datetime
 import logging
 import sqlite3
@@ -56,7 +57,7 @@ def _setup_spatialite_con(con: sqlite3.Connection):
     # Try the two versions, mac and linux with .so
     try:
         con.load_extension("mod_spatialite")
-    except:
+    except sqlite3.OperationalError:
         con.load_extension("mod_spatialite.so")
     # Allow us to use spatialite functions in on GPKG files.
     # https://medium.com/@joelmalone/sqlite3-spatialite-and-geopackages-66a08485da6c
@@ -169,7 +170,8 @@ def make_frame_table(outfile: str):
                 JOIN frames_bursts fb ON f.fid = fb.frame_fid
                 JOIN burst_id_map b ON fb.burst_ogc_fid = b.ogc_fid
                 GROUP BY 1
-            ) UPDATE frames SET relative_orbit_number = frame_tracks.relative_orbit_number
+            ) UPDATE frames
+            SET relative_orbit_number = frame_tracks.relative_orbit_number
             FROM frame_tracks
             WHERE frames.fid = frame_tracks.fid;
             """
@@ -352,11 +354,10 @@ def add_gpkg_spatial_ref_sys(outfile):
         _setup_spatialite_con(con)
         sql = "SELECT gpkgInsertEpsgSRID({epsg});"
         for epsg in tqdm(epsgs):
-            try:
+            # Add EPSGs to table, ignoring already-exists errors.
+            with contextlib.suppress(sqlite3.OperationalError, sqlite3.IntegrityError):
                 con.execute(sql.format(epsg=epsg))
-            except (sqlite3.OperationalError, sqlite3.IntegrityError):
-                # exists
-                pass
+
         # Fix the gpkg_spatial_ref_sys table for missing UTM zone 32760
         # https://www.gaia-gis.it/fossil/libspatialite/tktview/8b6910dbbb2180026af54a5cc5aac107fb1d62ad?plaintext
         sql = """INSERT INTO gpkg_spatial_ref_sys (
@@ -371,14 +372,25 @@ def add_gpkg_spatial_ref_sys(outfile):
                     32760,
                     'EPSG',
                     32760,
-'PROJCS["WGS 84 / UTM zone 60S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",177],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","32760"]]'
+                    ?
                 );
-        """  # noqa
-        try:
-            con.execute(sql)
-        except (sqlite3.OperationalError, sqlite3.IntegrityError):
-            # exists
-            pass
+        """
+        UTM_32760_DEF = (
+            'PROJCS["WGS 84 / UTM zone 60S",GEOGCS["WGS 84",'
+            'DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,'
+            'AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],'
+            'PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,'
+            'AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],'
+            'PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",177],'
+            'PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],'
+            'PARAMETER["false_northing",10000000],'
+            'UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],'
+            'AUTHORITY["EPSG","32760"]]'
+        )
+        # Ignore when exists.
+        with contextlib.suppress(sqlite3.OperationalError, sqlite3.IntegrityError):
+            con.execute(sql, UTM_32760_DEF)
+
         # More the entries from gpkg_spatial_ref_sys to spatial_ref_sys
         # so we can use the `ST_Transform` function
         con.execute("DROP TABLE IF EXISTS spatial_ref_sys;")
@@ -449,9 +461,10 @@ WHERE {table}.{id_column} = bboxes.{id_column} ;
 
 
 def make_minimal_db(db_path, df_frame_to_burst_id, output_path):
-    """Make a minimal database with only the following columns:
+    """Make a minimal database.
 
-    OGC_FID, burst_id_jpl, epsg, xmin, ymin, ymax, ymax
+    Containing only the following columns:
+        OGC_FID, burst_id_jpl, epsg, xmin, ymin, ymax, ymax
     """
     with sqlite3.connect(db_path) as con:
         df = pd.read_sql_query(
@@ -478,6 +491,7 @@ def make_minimal_db(db_path, df_frame_to_burst_id, output_path):
 
 
 def make_burst_to_frame_json(df, output_path: str, metadata: dict):
+    """Write JSON file mapping: burst IDs to the frame IDs that contain each burst."""
     data_dict = (
         df.set_index("burst_id_jpl")[["frame_fid"]]
         .rename(columns={"frame_fid": "frame_ids"})
@@ -489,6 +503,7 @@ def make_burst_to_frame_json(df, output_path: str, metadata: dict):
 
 
 def make_frame_to_burst_json(db_path: str, output_path: str, metadata: dict):
+    """Write JSON file mapping: frame IDs to the burst IDs that each frame contains."""
     with sqlite3.connect(db_path) as con:
         df_frame_to_burst = pd.read_sql_query(
             """
@@ -519,8 +534,7 @@ def make_frame_to_burst_json(db_path: str, output_path: str, metadata: dict):
 
 
 def _get_burst_to_frame_list(df_frame_to_burst_id):
-    """Get a DataFrame which maps the burst ID to the list of frames
-    containing the burst.
+    """Get a DataFrame mapping the burst ID to the list of frames containing the burst.
 
     Example:
     -------

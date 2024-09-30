@@ -17,9 +17,9 @@ GREENLAND_URL = "https://stacks.stanford.edu/file/druid:sd368wz2435/data.zip"
 
 
 def get_usgs_land(outpath=None):
-    """Get the USGS land data from the following url:
+    """Download the USGS land data.
 
-    https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-shp-2.3.7.zip
+    From URL: https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-shp-2.3.7.zip
     """
     outpath = Path(outpath) if outpath else Path.cwd()
     rzf = unzip_http.RemoteZipFile(USGS_LAND_URL)
@@ -82,9 +82,9 @@ def get_land_df(
 
 
 def get_greenland_shape(outpath=None, buffer_deg=0.2) -> MultiPolygon:
-    """Get the Greenland data from the following URL:
+    """Download the Greenland data.
 
-    https://stacks.stanford.edu/file/druid:sd368wz2435/data.zip
+    From URL: https://stacks.stanford.edu/file/druid:sd368wz2435/data.zip
     """
     outpath = Path(outpath) if outpath else Path.cwd()
     outname = outpath / f"greenland_{buffer_deg}deg_buffered.geojson"

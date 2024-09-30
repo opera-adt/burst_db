@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+from pathlib import Path
 
 ESA_DB_URL = "https://sar-mpc.eu/files/S1_burstid_20220530.zip"
 
@@ -13,8 +14,8 @@ def get_esa_burst_db(output_path="burst_map_IW_000001_375887.sqlite3"):
     """Download the ESA burst database."""
     print(f"Downloading ESA burst database from {ESA_DB_URL} to {output_path}.")
     db_filename = "S1_burstid_20220530/IW/sqlite/burst_map_IW_000001_375887.sqlite3"
-    cur_dir = os.getcwd()
-    output_path = os.path.abspath(output_path)
+    cur_dir = Path.cwd()
+    output_path = Path(output_path).absolute()
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
             os.chdir(tmpdir)
