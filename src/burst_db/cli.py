@@ -16,16 +16,12 @@ logger = logging.getLogger("burst_db")
 def cli_app():
     """Create/interact with OPERA's burst/frame databases."""
     handler = logging.StreamHandler()
-    handler.setLevel(logging.INFO)
-    # if verbose:
-    #     handler.setLevel(logging.DEBUG)
-    # else:
-    #     handler.setLevel(logging.INFO)
     formatter = logging.Formatter(
         "[%(levelname)s|%(module)s|L%(lineno)d] %(asctime)s: %(message)s"
     )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
 
 cli_app.add_command(create)
