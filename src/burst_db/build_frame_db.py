@@ -30,12 +30,8 @@ NORTH_EPSG = 3413
 # Threshold to use EPSG:3031, Antarctic Polar Stereographic (https://epsg.io/3031)
 SOUTH_THRESHOLD = -60
 SOUTH_EPSG = 3031
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-    handlers=[logging.StreamHandler()],
-    format="[%(levelname)s|%(module)s|L%(lineno)d] %(asctime)s: %(message)s",
-    level=logging.INFO,
-)
+
+logger = logging.getLogger("burst_db")
 
 
 def make_jpl_burst_id(df: pd.DataFrame):

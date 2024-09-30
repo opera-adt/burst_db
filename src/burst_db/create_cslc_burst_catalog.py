@@ -1,10 +1,10 @@
 import ast
 import csv
-import datetime
 import logging
 import re
 import tempfile
 from dataclasses import astuple
+from datetime import date, datetime
 from pathlib import Path
 
 import click
@@ -13,7 +13,7 @@ import pandas as pd
 from opera_utils import missing_data
 from tqdm.contrib.concurrent import thread_map
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("burst_db")
 
 
 def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
@@ -126,9 +126,7 @@ def _date_tup_string_to_list(input_string):
     matches = re.findall(date_pattern, input_string)
 
     # Convert the extracted date components to datetime.date objects
-    return [
-        datetime.date(int(year), int(month), int(day)) for year, month, day in matches
-    ]
+    return [date(int(year), int(month), int(day)) for year, month, day in matches]
 
 
 def make_consistent_burst_json(
@@ -233,12 +231,15 @@ def make_consistent_burst_json(
         ],
         axis=1,
     )
-    today_str = datetime.datetime.today().strftime("%Y-%m-%d")
+    today_str = datetime.today().strftime("%Y-%m-%d")
     date_str = today_str if date_range is None else date_range
     output_file = f"opera-disp-s1-consistent-burst-ids-{date_str}.json"
-    df_selected_as_lists.set_index("frame_id")[
+    df_output = df_selected_as_lists.set_index("frame_id")[
         ["burst_id_list", "sensing_time_list"]
-    ].to_json(output_file, orient="index", date_format="iso")
+    ]
+    # Add "ignore_list" for time ranges to skip entirely
+    # add to json, deliver
+    df_output.to_json(output_file, orient="index", date_format="iso")
 
     return Path(output_file)
 
@@ -269,7 +270,3 @@ def make_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
         date_range = None
 
     make_consistent_burst_json(output_file, date_range=date_range)
-
-
-if __name__ == "__main__":
-    make_burst_catalog()
