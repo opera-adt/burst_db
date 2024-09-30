@@ -217,6 +217,10 @@ def get_gdf(
     to_geodataframe: bool = False,
     debug: bool = False,
 ):
+    """Get a GeoDataFrame or DataFrame of bursts that intersect a given WKT geometry.
+
+    Optionally filtered by datetime range.
+    """
     import duckdb
     import shapely.wkt
 

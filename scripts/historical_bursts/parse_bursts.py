@@ -670,9 +670,9 @@ def bursts_from_safe_dir(
 
     Parameters
     ----------
-    path : str
+    path : str | Path
         Path to SAFE directory.
-    orbit_path : str
+    orbit_path : str | Path
         Path the orbit file.
 
     Returns
@@ -697,7 +697,7 @@ def bursts_from_safe_dir(
         raise ValueError(f"No annotation files found in {path}")
 
     for f_annotation in annotation_files:
-        bursts.extend(_bursts_from_xml(str(f_annotation), orbit_path))
+        bursts.extend(_bursts_from_xml(str(f_annotation), str(orbit_path)))
     if not bursts:
         logger.error(f"No bursts found in {path}")
 
@@ -774,7 +774,7 @@ def pull_safes_for_date(
         matching_granules = _find_matching(search_term, full_safe_list)
         zip_filenames = [f"{f}.SAFE.zip" for f in matching_granules]
         return _get_objects(
-            zip_filenames, bucket, in_folder, out_dir, max_workers=max_workers
+            zip_filenames, bucket, in_folder, Path(out_dir), max_workers=max_workers
         )
 
 

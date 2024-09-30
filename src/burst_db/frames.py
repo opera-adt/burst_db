@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import math
-from collections import Counter, namedtuple
+from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
 from functools import lru_cache
 from itertools import groupby, repeat
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -15,7 +16,13 @@ MIN_FRAME = 5
 MAX_FRAME = 12
 TARGET_FRAME = 10
 
-FrameSlice = namedtuple("FrameSlice", ["start_idx", "end_idx", "is_land"])
+
+class FrameSlice(NamedTuple):
+    """A slice of frames with start, end indices and a land indicator."""
+
+    start_idx: int
+    end_idx: int
+    is_land: bool
 
 
 def create_frame_to_burst_mapping(
@@ -137,7 +144,8 @@ def solve(n, target=TARGET_FRAME, max_frame=MAX_FRAME, min_frame=MIN_FRAME):
     Notes
     -----
     This is posed as the same problem as the text justification problem.
-    "words" == bursts. "lines" == Frames. Where to "break the lines" == "group the frames"
+    "words" == bursts. "lines" == Frames.
+    Where to "break the lines" == "group the frames"
 
     The differences between here and reference [1]_ are
 
@@ -151,7 +159,8 @@ def solve(n, target=TARGET_FRAME, max_frame=MAX_FRAME, min_frame=MIN_FRAME):
     Reference
     ---------
     ..[1] https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-fall-2011/resources/mit6_006f11_lec20/
-    """  # noqa
+
+    """
     # DP[i][0] is the minimum badness of the frames starting at i
     # and DP[i][1] is the index of the next frame (to backtrack and get the slices)
     DP = [None] * (n + 1)

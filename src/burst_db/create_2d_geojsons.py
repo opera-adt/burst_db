@@ -7,7 +7,7 @@ from burst_db import VERSION_CLEAN, __version__
 def create_2d_geojsons(
     in_file: str = f"opera-s1-disp-{VERSION_CLEAN}.gpkg",
 ) -> list[Path]:
-    """Creates 2D GeoJSON files from a 3D GeoPackage database.
+    """Create 2D GeoJSON files from a 3D GeoPackage database.
 
     This function takes a 3D GeoPackage database containing burst geometry
     and metadata, extracts 2D representations of the geometry.
