@@ -1,6 +1,8 @@
 click
+duckdb
 geopandas
 numpy
+opera-utils
 pandas
 shapely
 tqdm

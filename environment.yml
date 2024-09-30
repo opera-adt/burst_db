@@ -3,6 +3,7 @@ channels:
 dependencies:
 - python >= 3.9
 - click
+- duckdb
 - fiona
 - geopandas-base
 - numpy
