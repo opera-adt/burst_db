@@ -43,6 +43,7 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
         "Temporal Time"::TIMESTAMP AS sensing_time,
         MAX("Revision Time"::TIMESTAMP) AS max_revision_time,
         FIRST("# Granule ID") AS granule_id,
+        granule_id[72:73] AS pol,
         FIRST("Revision-Temporal Delta Hours") AS delta_hours,
         FIRST("revision-id") AS revision_id
     FROM read_csv_auto('{input_csv}', header=True, sample_size=-1)
@@ -71,6 +72,7 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
     JOIN opera.burst_id_map bm ON b.burst_id_jpl = bm.burst_id_jpl
     JOIN opera.frames_bursts fb ON fb.burst_ogc_fid = bm.OGC_FID
     JOIN opera.frames f ON fb.frame_fid = f.fid
+    WHERE pol = 'VV'
     """
         )
 
@@ -233,15 +235,17 @@ def make_consistent_burst_json(
     )
     today_str = datetime.today().strftime("%Y-%m-%d")
     date_str = today_str if date_range is None else date_range
-    output_file = f"opera-disp-s1-consistent-burst-ids-{date_str}.json"
+    base_name = f"opera-disp-s1-consistent-burst-ids-{today_str}"
+    if date_range is not None:
+        base_name += f"-{date_str}"
+
+    output_file = Path(base_name).with_suffix(".json")
     df_output = df_selected_as_lists.set_index("frame_id")[
         ["burst_id_list", "sensing_time_list"]
     ]
-    # Add "ignore_list" for time ranges to skip entirely
-    # add to json, deliver
-    df_output.to_json(output_file, orient="index", date_format="iso")
+    df_output.to_json(output_file, orient="index", date_format="iso", indent=2)
 
-    return Path(output_file)
+    return output_file
 
 
 @click.command()
