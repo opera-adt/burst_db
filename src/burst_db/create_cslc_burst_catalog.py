@@ -45,6 +45,7 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
         "Temporal Time"::TIMESTAMP AS sensing_time,
         MAX("Revision Time"::TIMESTAMP) AS max_revision_time,
         FIRST("# Granule ID") AS granule_id,
+        granule_id[72:73] AS pol,
         FIRST("Revision-Temporal Delta Hours") AS delta_hours,
         FIRST("revision-id") AS revision_id
     FROM read_csv_auto('{input_csv}', header=True, sample_size=-1)
@@ -73,6 +74,7 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
     JOIN opera.burst_id_map bm ON b.burst_id_jpl = bm.burst_id_jpl
     JOIN opera.frames_bursts fb ON fb.burst_ogc_fid = bm.OGC_FID
     JOIN opera.frames f ON fb.frame_fid = f.fid
+    WHERE pol = 'VV'
     """
         )
 
@@ -295,7 +297,7 @@ def make_consistent_burst_json(
     with open(output_file, "w") as f:
         f.write(json.dumps(total_out, indent=2, default=str))
 
-    return Path(output_file)
+    return output_file
 
 
 @click.command()
