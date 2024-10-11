@@ -1,11 +1,13 @@
 import ast
 import csv
+import json
 import logging
 import re
 import tempfile
 from dataclasses import astuple
 from datetime import date, datetime
 from pathlib import Path
+from typing import Optional
 
 import click
 import duckdb
@@ -129,8 +131,25 @@ def _date_tup_string_to_list(input_string):
     return [date(int(year), int(month), int(day)) for year, month, day in matches]
 
 
+def _date_is_excluded(
+    frame_id: int | str, check_date: date, blackout_periods: dict[str, list[list[str]]]
+) -> bool:
+    if not blackout_periods.get(str(frame_id)):
+        return False
+
+    for start_str, end_str in blackout_periods[str(frame_id)]:
+        start_date = datetime.fromisoformat(start_str).date()
+        end_date = datetime.fromisoformat(end_str).date()
+        if start_date <= check_date <= end_date:
+            return True
+    return False
+
+
 def make_consistent_burst_json(
-    db_file: Path | str, date_range: str | None = None
+    db_file: Path | str,
+    date_range: str | None = None,
+    blackout_file: Path | str | None = None,
+    input_files: Optional[dict[str, Path | str]] = None,
 ) -> Path:
     """Create the JSON database of consistent burst IDs over time.
 
@@ -142,6 +161,12 @@ def make_consistent_burst_json(
         String describing date range that `db_file` covers.
         Used to name the output JSON file
         By default None
+    blackout_file : Path | str, optional
+        Filename of the per-frame blackout periods.
+        If included, will skip over all sensing times a frame has within each period.
+    input_files : dict[str, Path|str], optional
+        For metadata tracking, the intput CMR survey/other files for trackign in
+        the `metadata` key.
 
     Returns
     -------
@@ -149,16 +174,28 @@ def make_consistent_burst_json(
         Path to output JSON file.
 
     """
+    if input_files is None:
+        input_files = {}
     df_bursts_all = fetch_bursts(db_file=db_file)
+    if blackout_file:
+        blackout_periods = json.loads(Path(blackout_file).read_text())["blackout_dates"]
+    else:
+        blackout_periods = {}
+
     frame_ids = df_bursts_all.frame_id.unique()
-    frame_id_date_to_sensing_time = (
-        # Take the sensing time of the earlier burst id
-        df_bursts_all.groupby(["frame_id", "sensing_date"])["sensing_time"]
-        # only use the earliest burst time (the beginning sensing of this frame
-        .min()
-        # truncate away the microseconds
-        .dt.floor("s").to_dict()
-    )
+    frame_id_date_to_sensing_time = {
+        (frame_id, sensing_date): sensing_time
+        for (frame_id, sensing_date), sensing_time in (
+            # Take the sensing time of the earlier burst id
+            df_bursts_all.groupby(["frame_id", "sensing_date"])["sensing_time"]
+            # only use the earliest burst time (the beginning sensing of this frame
+            .min()
+            # truncate away the microseconds
+            .dt.floor("s").items()
+        )
+        # Filter away sensing times that fall in the blackout period
+        if not _date_is_excluded(str(frame_id), sensing_date, blackout_periods)
+    }
     with tempfile.TemporaryDirectory() as tmpdir:
         out_dir = Path(tmpdir)
         out_dir.mkdir(exist_ok=True, parents=True)
@@ -222,24 +259,41 @@ def make_consistent_burst_json(
         _date_tup_string_to_list
     )
 
+    def _to_dt_string(row):
+        out = []
+        for cur_date in row["date_list"]:
+            d = frame_id_date_to_sensing_time.get((row["frame_id"], cur_date))
+            if not d:
+                continue
+            out.append(d.strftime("%Y-%m-%dT%H:%M:%S"))
+        return out
+
     df_selected_as_lists["sensing_time_list"] = df_selected_as_lists.apply(
-        lambda row: [
-            frame_id_date_to_sensing_time.get((row["frame_id"], date), None).strftime(
-                "%Y-%m-%dT%H:%M:%S"
-            )
-            for date in row["date_list"]
-        ],
-        axis=1,
+        _to_dt_string, axis=1
     )
+
     today_str = datetime.today().strftime("%Y-%m-%d")
-    date_str = today_str if date_range is None else date_range
-    output_file = f"opera-disp-s1-consistent-burst-ids-{date_str}.json"
+    basename = f"opera-disp-s1-consistent-burst-ids-{today_str}"
+    if date_range is not None:
+        basename = basename + f"-{date_range}"
+    output_file = Path(basename).with_suffix(".json")
+
     df_output = df_selected_as_lists.set_index("frame_id")[
         ["burst_id_list", "sensing_time_list"]
     ]
     # Add "ignore_list" for time ranges to skip entirely
     # add to json, deliver
-    df_output.to_json(output_file, orient="index", date_format="iso")
+    out_data = df_output.to_dict(orient="index")
+    total_out = {
+        "metadata": {
+            "generation_time": datetime.today(),
+            "blackout_file": blackout_file,
+            **input_files,
+        },
+        "data": out_data,
+    }
+    with open(output_file, "w") as f:
+        f.write(json.dumps(total_out, indent=2, default=str))
 
     return Path(output_file)
 
@@ -247,19 +301,42 @@ def make_consistent_burst_json(
 @click.command()
 @click.argument("input_csv", type=click.Path(exists=True, path_type=Path))
 @click.argument("opera_db", type=click.Path(exists=True, path_type=Path))
-@click.argument("output_file", type=click.Path(path_type=Path))
-def make_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
+@click.option(
+    "--full-db-path",
+    type=click.Path(path_type=Path),
+    help=(
+        "Name of .duckdb file to store all burst catalog info. Default is"
+        " `cslc-burst-database-{today}.duckdb`"
+    ),
+)
+@click.option(
+    "--blackout-file",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to per-frame blackout periods made by `create_blackout_dates_s1`",
+)
+def make_burst_catalog(
+    input_csv: Path,
+    opera_db: Path,
+    full_db_path: Path | None,
+    blackout_file: Path | None,
+):
     """Create a burst catalog and consistent burst JSON.
 
     INPUT_CSV: Path to the input CSV file containing CMR-queried burst data.
     OPERA_DB: Path to the OPERA DISP Frame geopackage database.
-    OUTPUT_FILE: Path to the output .duckdb file for the full deduped bursts.
+    full_db_name: Path to the output .duckdb file for the full deduped bursts.
     """
-    if not output_file.exists():
-        create_burst_catalog(input_csv, opera_db, output_file)
-        logger.info(f"Burst catalog created: {output_file}")
+    if full_db_path is None:
+        today = datetime.now().strftime("%Y-%m-%d")
+        full_db_path = Path(f"cslc-burst-database-{today}.duckdb")
+
+    if not full_db_path.exists():
+        logger.info(f"Creating {full_db_path}")
+        create_burst_catalog(input_csv, opera_db, full_db_path)
+        logger.info(f"Burst catalog created: {full_db_path}")
     else:
-        logger.info(f"Using existing burst catalog {output_file}")
+        logger.info(f"Using existing burst catalog {full_db_path}")
+
     try:
         # Name should be like:
         # "cmr_survey.csv.raw.2016-07-01_to_2024-09-04.csv"
@@ -269,4 +346,13 @@ def make_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
         logger.warning(f"Failed to parse date range from {input_csv}", exc_info=True)
         date_range = None
 
-    make_consistent_burst_json(output_file, date_range=date_range)
+    make_consistent_burst_json(
+        full_db_path,
+        date_range=date_range,
+        blackout_file=blackout_file,
+        input_files={
+            "input_cmr_csv": input_csv,
+            "opera_db_file": opera_db,
+            "generated_burst_db": full_db_path,
+        },
+    )
