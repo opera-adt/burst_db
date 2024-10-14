@@ -385,7 +385,7 @@ def add_gpkg_spatial_ref_sys(outfile):
         )
         # Ignore when exists.
         with contextlib.suppress(sqlite3.OperationalError, sqlite3.IntegrityError):
-            con.execute(sql, UTM_32760_DEF)
+            con.execute(sql, (UTM_32760_DEF,))
 
         # More the entries from gpkg_spatial_ref_sys to spatial_ref_sys
         # so we can use the `ST_Transform` function
