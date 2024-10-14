@@ -326,7 +326,6 @@ def make_burst_catalog(
 
     INPUT_CSV: Path to the input CSV file containing CMR-queried burst data.
     OPERA_DB: Path to the OPERA DISP Frame geopackage database.
-    full_db_name: Path to the output .duckdb file for the full deduped bursts.
     """
     if full_db_path is None:
         today = datetime.now().strftime("%Y-%m-%d")
