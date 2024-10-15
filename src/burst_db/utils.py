@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import zipfile
+from itertools import islice
 from pathlib import Path
 
 from shapely import box
@@ -26,3 +27,13 @@ def write_zipped_json(json_path: str, dict_out: dict, level: int = 6):
 def build_wkt_from_bbox(xmin: float, ymin: float, xmax: float, ymax: float) -> str:
     """Convert bounding box coordinates to WKT POLYGON string."""
     return box(xmin, ymin, xmax, ymax).wkt
+
+
+def batched(iterable, n):
+    """Divide `iterable` into `n` batches."""
+    # batched('ABCDEFG', 3) --> ABC DEF G
+    if n < 1:
+        raise ValueError("n must be at least one")
+    it = iter(iterable)
+    while batch := tuple(islice(it, n)):
+        yield batch
