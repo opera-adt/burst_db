@@ -22,8 +22,11 @@ def get_urls_for_frame(
             f"Unknown output_type: {output_type}, must be in {OUTPUT_TYPES}"
         )
 
+    data: dict[str, dict[str, list[str]]]
     with open(json_file, "r") as f:
-        data: dict[str, dict[str, list[str]]] = json.load(f)
+        loaded = json.load(f)
+        # Account for the "unnested" version, or nested withing data/metadata keys
+        data = loaded.get("data", loaded)
 
     if str(frame_id) not in data:
         raise ValueError(f"Frame {frame_id} not found in the JSON file.")
