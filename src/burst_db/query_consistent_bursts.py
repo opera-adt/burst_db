@@ -182,7 +182,7 @@ def urls_for_frame(
     output_path.mkdir(parents=True, exist_ok=True)
 
     date_to_urls = group_by_date(urls, date_idx=0)
-    for i, batch in enumerate(batched(date_to_urls.items(), ministack_size)):
+    for i, batch in enumerate(batched(sorted(date_to_urls.items()), ministack_size)):
         output_file = output_path / f"ministack-{i:02d}.txt"
         num_urls = 0
         with output_file.open("w") as f:
