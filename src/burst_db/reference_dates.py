@@ -39,6 +39,9 @@ def calculate_reference_dates(
     """
     with open(consistent_json_file, "r") as f:
         consistent_data = json.load(f)
+        # Check if we have the verison with top level metadata/data
+        if "data" in consistent_data:
+            consistent_data = consistent_data["data"]
 
     reference_dates: dict[str, dict[str, list]] = {}
     interval_days = int(interval_years * 365.25)
@@ -111,7 +114,7 @@ def calculate_reference_dates(
     "--output",
     help=(
         "Manually name the output JSON file. If, not given, defaults to"
-        " 'opera-disp-s1-consistent-burst-ids-{today}.json'"
+        " 'opera-disp-s1-reference-dates-{today}.json'"
     ),
 )
 @click.option(
@@ -137,11 +140,19 @@ def make_reference_dates(
     """Generate a reference dates JSON file for InSAR time series processing.
 
     CONSISTENT_JSON_FILE: Path to the input JSON file with consistent data.
-    OUTPUT_FILE: Path to the output JSON file.
     """
     reference_dates = calculate_reference_dates(
         consistent_json_file, interval, min_acquisitions
     )
+    total_out = {
+        "metadata": {
+            "generation_time": datetime.today(),
+            "consistent_json_file": consistent_json_file,
+            "interval": interval,
+            "min_acquisitions": min_acquisitions,
+        },
+        "data": reference_dates,
+    }
     if output is None:
         today_str = datetime.today().strftime("%Y-%m-%d")
         output_file = f"opera-disp-s1-reference-dates-{today_str}.json"
@@ -150,13 +161,18 @@ def make_reference_dates(
         output_file = output
         minimal_output_file = output_file.replace(".json", "-minimal.json")
 
+    def _dt_to_str(obj):
+        return obj.isoformat() if isinstance(obj, datetime) else obj
+
     with open(output_file, "w") as f:
-        json.dump(reference_dates, f, indent=2)
+        json.dump(total_out, f, indent=2, default=_dt_to_str)
     click.echo(f"Reference dates JSON with full sensing times created: {output_file}")
 
     minimal_version = {
         frame_id: data["reference_dates"] for frame_id, data in reference_dates.items()
     }
+    minimal_out = total_out.copy()
+    minimal_out["data"] = minimal_version
     with open(minimal_output_file, "w") as f:
-        json.dump(minimal_version, f, indent=2)
+        json.dump(minimal_out, f, indent=2, default=_dt_to_str)
     click.echo(f"Minimal reference dates JSON file created: {minimal_output_file}")
