@@ -7,6 +7,26 @@
 #   "backoff",
 # ]
 # ///
+"""Survey the ASF burst catalog.
+
+Runnable with `pipx`:
+
+pipx run asf_burst_survey.py burst_ids_north_america.csv
+
+To create the list of North america burst ids:
+
+import opera_utils
+
+gdf_bursts = opera_utils.get_burst_id_geojson(True)
+burst_ids_unique = (
+    gdf_bursts[gdf_bursts.is_north_america == "1"]
+    .burst_id_jpl.str.strip("t")
+    .str.upper().unique()
+)
+pd.DataFrame(burst_ids_unique).to_csv("burst_ids_north_america.csv")
+
+
+"""
 
 from tqdm.contrib.concurrent import thread_map
 from itertools import repeat
