@@ -13,7 +13,7 @@ from shapely.geometry import MultiPolygon
 USGS_LAND_URL = (
     "https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-shp-2.3.7.zip"
 )
-GREENLAND_URL = "https://stacks.stanford.edu/file/druid:sd368wz2435/data.zip"
+GREENLAND_URL = "https://simplemaps.com/static/svg/country/gl/admin1/gl_shp.zip"
 
 
 def get_usgs_land(outpath=None):
