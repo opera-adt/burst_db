@@ -55,7 +55,7 @@ SELECT b.fid,
 FROM frames f
     JOIN frames_bursts fb ON fb.frame_fid = f.fid
     JOIN burst_id_map b ON fb.burst_ogc_fid = b.fid
-WHERE is_land=1;
+;
 """
 
     sql_query_frame = """
@@ -65,7 +65,7 @@ SELECT f.fid,
     orbit_pass,
     st_simplify(f.geom, 0.1) AS geometry
 FROM frames f
-WHERE is_land=1;
+;
 """
 
     output_files = []
