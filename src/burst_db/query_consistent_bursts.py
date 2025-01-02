@@ -40,8 +40,13 @@ def get_urls_for_frame(
     frame_data = data[str(frame_id)]
     burst_ids = frame_data.get("burst_id_list", [])
     sensing_times = frame_data.get("sensing_time_list", [])
-    sensing_date_set = {datetime.fromisoformat(t).date() for t in sensing_times}
-    expected_total_files = len(burst_ids) * len(sensing_times)
+    # Convert sensing times to dates and filter based on start_date and end_date
+    sensing_date_set = {
+        datetime.fromisoformat(t).date() for t in sensing_times
+        if (start_date is None or datetime.fromisoformat(t).date() >= start_date.date())
+        and (end_date is None or datetime.fromisoformat(t).date() <= end_date.date())
+    }
+    expected_total_files = len(burst_ids) * len(sensing_date_set)
 
     logger.info(f"Searching {json_file} for bursts for Frame {frame_id}.")
     if not sensing_times:
@@ -95,14 +100,13 @@ def get_urls_for_frame(
     if not filtered_results:
         logger.warning("No search results match the provided sensing times.")
         return
-
     # Apply deduplication
     deduped_results = opera_utils.download.filter_results_by_date_and_version(
         filtered_results
     )
     # logger.info(f"Results after deduplication: {len(deduped_results)}")
     if len(deduped_results) != expected_total_files:
-        result_str = "\n".join(deduped_results)
+        result_str = "\n".join([r.properties.get("fileName", "") for r in deduped_results])
         logger.error(f"Unexpected results: {result_str}")
         raise ValueError(
             f"Expected to find {expected_total_files}, found {len(deduped_results)}"
