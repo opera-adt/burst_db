@@ -89,10 +89,10 @@ def make_burst_triplets(df_burst: pd.DataFrame) -> pd.DataFrame:
     return df_burst_triplet
 
 
-def get_land_indicator(gdf: gpd.GeoDataFrame, land_geom: GeometryType.POLYGON):
-    """Get a boolean array indicating if each row of `gdf` intersects `land_geom`."""
+def get_intersect_indicator(gdf: gpd.GeoDataFrame, test_geom: GeometryType.POLYGON):
+    """Get a boolean array indicating if each row of `gdf` intersects `test_geom`."""
     tree = STRtree(gdf.geometry)
-    idxs_land = tree.query(land_geom, predicate="intersects")
+    idxs_land = tree.query(test_geom, predicate="intersects")
     if idxs_land.ndim == 2:
         idxs_land = idxs_land[1]
     is_in_land = gdf.index.isin(idxs_land)
@@ -256,7 +256,7 @@ def get_epsg_codes(df: gpd.GeoDataFrame):
 
     # Set all Greenland frames to EPSG:3413
     geom_greenland = get_greenland_shape()
-    is_in_greenland = get_land_indicator(df, geom_greenland)
+    is_in_greenland = get_intersect_indicator(df, geom_greenland)
     logger.info(
         f"{is_in_greenland.sum()} frames are in Greenland. Setting to EPSG:{NORTH_EPSG}"
     )
@@ -654,6 +654,9 @@ def create(
     # placeholder to compute later
     df_burst.loc[:, "epsg"] = 0
 
+    geom_north_america = get_opera_na_shape()
+    is_in_na = get_intersect_indicator(df_burst, geom_north_america)
+    df_burst.loc[:, "is_north_america"] = is_in_na
     # Start the outfile with the ESA database contents
     logger.info("Saving initial version of `burst_id_map` table")
     df_burst.set_index("OGC_FID").to_file(
@@ -672,7 +675,7 @@ def create(
     df_land = get_land_df(land_buffer_deg)
     land_geom = df_land.geometry
 
-    is_in_land = get_land_indicator(df_burst_triplet, land_geom)
+    is_in_land = get_intersect_indicator(df_burst_triplet, land_geom)
 
     # Create frames and JOIN tables
     # Make the JOIN table first
@@ -696,8 +699,7 @@ def create(
     df_frames.loc[:, "epsg"] = pd.to_numeric(epsgs, errors="coerce")
 
     # Mark the ones in north america in the OPERA region of interest
-    geom_north_america = get_opera_na_shape()
-    is_in_north_america = get_land_indicator(df_frames, geom_north_america)
+    is_in_north_america = get_intersect_indicator(df_frames, geom_north_america)
     df_frames.loc[:, "is_north_america"] = is_in_north_america
 
     logger.info("Final number of frames: %s", len(df_frames))

@@ -69,7 +69,8 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
         b.burst_id_jpl,
         b.sensing_time,
         f.fid AS frame_id,
-        f.is_north_america
+        f.is_north_america as frame_is_north_america,
+        bm.is_north_america as burst_is_north_america,
     FROM bursts b
     JOIN opera.burst_id_map bm ON b.burst_id_jpl = bm.burst_id_jpl
     JOIN opera.frames_bursts fb ON fb.burst_ogc_fid = bm.OGC_FID
@@ -101,7 +102,7 @@ def fetch_bursts(db_file: Path | str):
     FROM
       bursts_with_frame_ids
     WHERE
-      is_north_america
+      burst_is_north_america
     ORDER BY
       frame_id,
       burst_id_jpl,
