@@ -1,7 +1,7 @@
 """Module to read the OPERA North America shape.
 
 Data comes from:
-https://raw.githubusercontent.com/nasa/opera-sds-pcm/refs/heads/develop/geo/opera_NA_expanded.geojson
+https://raw.githubusercontent.com/nasa/opera-sds-pcm/refs/heads/develop/geo/north_america_opera.geojson
 
 """
 
@@ -15,7 +15,7 @@ def get_opera_na_shape() -> GeometryType.MULTIPOLYGON:
     """Read the OPERA North America geometry as a shapely `multipolygon`.
 
     Data source
-    https://raw.githubusercontent.com/nasa/opera-sds-pcm/refs/heads/develop/geo/opera_NA_expanded.geojson
+    https://raw.githubusercontent.com/nasa/opera-sds-pcm/refs/heads/develop/geo/north_america_opera.geojson
 
     """
     filename = Path(__file__).parent / "data" / "north_america_opera.geojson.zip"
