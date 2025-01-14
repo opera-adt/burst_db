@@ -49,21 +49,23 @@ def create_2d_geojsons(
 SELECT b.fid,
     b.burst_id_jpl,
     is_land,
-    is_north_america,
+    b.is_north_america as is_north_america,
     b.orbit_pass,
     st_simplify(b.geom, 0.1) AS geometry
 FROM frames f
     JOIN frames_bursts fb ON fb.frame_fid = f.fid
     JOIN burst_id_map b ON fb.burst_ogc_fid = b.fid
+;
 """
 
     sql_query_frame = """
 SELECT f.fid,
     is_land,
-    is_north_america,
+    f.is_north_america,
     orbit_pass,
     st_simplify(f.geom, 0.1) AS geometry
 FROM frames f
+;
 """
 
     output_files = []
