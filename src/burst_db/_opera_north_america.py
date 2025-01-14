@@ -16,6 +16,7 @@ def get_opera_na_shape() -> GeometryType.MULTIPOLYGON:
 
     Data source
     https://raw.githubusercontent.com/nasa/opera-sds-pcm/refs/heads/develop/geo/north_america_opera.geojson
+
     """
     filename = Path(__file__).parent / "data" / "north_america_opera.geojson.zip"
     na_gpd = gpd.read_file(filename)
