@@ -124,9 +124,18 @@ You can also drag the `opera-s1-disp.gpkg` file into QGIS to load the `frames` a
 
 ![production flow](./docs/DISP-S1-database-production-flow.drawio.svg)
 
-The example here is for version 0.7.0
+The following instructions show how to create the auxilliary database for DISP-S1 processing.
 
-1. Set up the folder for the current release:
+The example uses version 0.7.0.
+
+### Prerequisites
+
+- CMR survey file (gzipped)
+- Snow blackout dates file (optional)
+
+### Steps
+
+1. Set up the output folder for the current release:
 
 ```bash
 mkdir outputs-070
@@ -146,16 +155,18 @@ cp /path/to/opera-disp-s1-blackout-dates-2024-10-16.json .
 make -f ../Makefile
 ```
 
-The processing should take ~5-8 minutes, depending on download speed.
+Typical processing should take ~5-8 minutes, depending on download speed.
 
-### Optional prerequisite input: Snow blackout dates
+### Note on optional prerequisite input: Snow blackout dates
+
+To create the blackout input, the following module is used (currently no CLI):
 
 ```python
 import burst_db.create_blackout_dates_s1
 burst_db.create_blackout_dates_s1.gdf_to_blackout_json(input_json_file)
 ```
 
-### Subcommands run
+### Details on subcommands run
 
 #### Frame ID and Burst ID Geopackage database
 
