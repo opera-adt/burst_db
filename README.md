@@ -109,6 +109,7 @@ These data structures can be read into python using the function `build_frame_db
 
 The command also makes a full [Geopackage database](https://www.geopackage.org/) (which is based on sqlite), where the `burst_id_map` table contains the burst geometries, the `frames` table contains the frame geometries, and the `frames_bursts` table is the JOIN table for the many-to-many relationship.
 An example SQL query to view all columns of these tables is
+
 ```sql
 SELECT *
 FROM frames f
@@ -116,11 +117,12 @@ JOIN frames_bursts fb ON fb.frame_fid = f.fid
 JOIN burst_id_map b ON fb.burst_ogc_fid = b.ogc_fid
 LIMIT 1;
 ```
+
 You can also drag the `opera-s1-disp.gpkg` file into QGIS to load the `frames` and `burst_id_map` tables to filter/view the geometries.
 
 ## Creating the databases
 
-~[](./docs/DISP-S1-database-production-flow.drawio.pdf)
+![production flow](./docs/DISP-S1-database-production-flow.drawio.svg)
 
 The example here is for version 0.7.0
 
@@ -131,11 +133,20 @@ mkdir outputs-070
 cd outputs-070
 ```
 
-2. Run `make`
+2. Copy in the CMR survey gzipped file and (optionally) snow blackout file
+
+```bash
+cp /path/to/survey/cmr-surveys/cmr_survey.2016-07-01_to_2024-12-10.csv.tar.gz .
+cp /path/to/opera-disp-s1-blackout-dates-2024-10-16.json .
+```
+
+3. Run `make`
 
 ```bash
 make -f ../Makefile
 ```
+
+The processing should take ~5-8 minutes, depending on download speed.
 
 ### Optional prerequisite input: Snow blackout dates
 
