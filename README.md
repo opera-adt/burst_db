@@ -1,7 +1,9 @@
 # Burst_DB
+
 Sentinel-1 Burst and Frame Databases for OPERA CSLC-S1/DISP-S1
 
 ## Installation
+
 Follow the steps below to install `burst_db` using conda environment.
 
 1. Download source code:
@@ -14,7 +16,7 @@ cd burst_db
 2. Install dependencies:
 
 ```bash
-conda install --name burst_db -c conda-forge --file environment.yml
+conda env create
 ```
 
 3. Install via pip:
@@ -32,21 +34,24 @@ Installing the package creates the `opera-db` command line tool:
 $ opera-db --help
 Usage: opera-db [OPTIONS] COMMAND [ARGS]...
 
-  Create/interact with OPERA's burst/frame databases.
+  Create/interact with OPERA's Sentinel-1 burst/frame databases.
 
 Options:
   --help  Show this message and exit.
 
 Commands:
-  create          Generate the OPERA frame database for Sentinel-1 data.
-  fetch-bursts    Get all (burst_id_jpl, sensing_time) for a list of...
-  fetch-granules  Fetch granules for given frame IDs.
-  intersect       Query for frames intersecting a given bounding box or...
-  lookup          Query the geopackage database for one frame ID.
+  create                Generate the OPERA frame database for Sentinel-1...
+  historical            Sub-commands for interacting with the historical...
+  intersect             Query for frames intersecting a given bounding...
+  lookup                Query the geopackage database for one frame ID.
+  make-burst-catalog    Create a burst catalog and consistent burst JSON.
+  make-reference-dates  Generate a reference dates JSON file for InSAR...
+  urls-for-frame        Retrieve URLs for a specific FRAME_ID using the...
+
 ```
 
+## Creating the Burst database sqlite file
 
-### Creating the Burst database sqlite file
 The `opera-db create` CLI will create the Sqlite database containing the burst IDs, bounding boxes, and UTM EPSG codes for all Sentinel-1 burst ID footprints.
 
 The program uses the database of Sentinel-1 bursts released by ESA. The data can be downloaded from [here](https://sar-mpc.eu/files/S1_burstid_20220530.zip), but if it is not present in the current directory, the program will download it automatically.
@@ -112,3 +117,5 @@ JOIN burst_id_map b ON fb.burst_ogc_fid = b.ogc_fid
 LIMIT 1;
 ```
 You can also drag the `opera-s1-disp.gpkg` file into QGIS to load the `frames` and `burst_id_map` tables to filter/view the geometries.
+
+## Creating the C
