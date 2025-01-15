@@ -11,6 +11,14 @@ EVENT_DATES_BY_FRAME = {
     "18903": ["2019-07-06"],
 }
 
+FRAMES_TO_SKIP = {
+    # Hawaii big island:
+    "23211",
+    "23212",
+    "33038",
+    "33039",
+}
+
 
 def calculate_reference_dates(
     consistent_json_file: str,
@@ -104,6 +112,11 @@ def calculate_reference_dates(
             ],
             "acquisition_counts": [len(group) for group in grouped_sensing_times],
         }
+
+        # Account for frames where we skip the reference change
+        if str(frame_id) in FRAMES_TO_SKIP:
+            cur_dates = reference_dates[frame_id]["reference_dates"]
+            reference_dates[frame_id]["reference_dates"] = cur_dates[:1]
 
     return reference_dates
 
