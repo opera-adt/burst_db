@@ -14,7 +14,7 @@ logger = logging.getLogger("burst_db")
 
 @click.group()
 def cli_app():
-    """Create/interact with OPERA's Sentinle-1 burst/frame databases."""
+    """Create/interact with OPERA's Sentinel-1 burst/frame databases."""
     handler = logging.StreamHandler()
     formatter = logging.Formatter(
         "[%(levelname)s|%(module)s|L%(lineno)d] %(asctime)s: %(message)s"
