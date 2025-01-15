@@ -118,4 +118,49 @@ LIMIT 1;
 ```
 You can also drag the `opera-s1-disp.gpkg` file into QGIS to load the `frames` and `burst_id_map` tables to filter/view the geometries.
 
-## Creating the C
+## Creating the databases
+
+~[](./docs/DISP-S1-database-production-flow.drawio.pdf)
+
+The example here is for version 0.7.0
+
+1. Set up the folder for the current release:
+
+```bash
+mkdir outputs-070
+cd outputs-070
+```
+
+2. Run `make`
+
+```bash
+make -f ../Makefile
+```
+
+### Optional prerequisite input: Snow blackout dates
+
+```python
+import burst_db.create_blackout_dates_s1
+burst_db.create_blackout_dates_s1.gdf_to_blackout_json(input_json_file)
+```
+
+### Subcommands run
+
+#### Frame ID and Burst ID Geopackage database
+
+```bash
+opera-db create # Creates the geopackage, and aux. geojson helper files
+```
+
+Parse the "CMR survey" of all existing bursts, and keep a set which is consistent through space and time (i.e. no spatial gaps will appear while processing)
+
+```bash
+opera-db make-burst-catalog ...
+```
+
+Set up a JSON, one key per DISP-S1 Frame ID, listing the "reference date changes".
+This indicates to the processing system that we should start outputting data with respect to a new reference, to avoid attempting to form very long temporal baseline interferograms.
+
+```bash
+opera-db make-reference-dates
+```

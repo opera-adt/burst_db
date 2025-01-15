@@ -71,7 +71,7 @@ def gdf_to_blackout_json(input_file: Path | str) -> dict:
         blackout_dates[str(frame_id)] = frame_dates or []
 
     generation_time = datetime.now().strftime("%Y-%m-%d")
-    output_filename = f"disp-s1-blackout-dates-{generation_time}.json"
+    output_filename = f"opera-disp-s1-blackout-dates-{generation_time}.json"
 
     result = {
         "metadata": {

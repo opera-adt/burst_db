@@ -41,10 +41,10 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
             f"""
     CREATE TABLE bursts AS
     SELECT
-        LOWER(REPLACE(substring("# Granule ID", 18, 15), '-', '_')) AS burst_id_jpl,
+        LOWER(REPLACE(substring("Granule ID", 18, 15), '-', '_')) AS burst_id_jpl,
         "Temporal Time"::TIMESTAMP AS sensing_time,
         MAX("Revision Time"::TIMESTAMP) AS max_revision_time,
-        FIRST("# Granule ID") AS granule_id,
+        FIRST("Granule ID") AS granule_id,
         granule_id[72:73] AS pol,
         FIRST("Revision-Temporal Delta Hours") AS delta_hours,
         FIRST("revision-id") AS revision_id
@@ -339,13 +339,13 @@ def make_burst_catalog(
     else:
         logger.info(f"Using existing burst catalog {full_db_path}")
 
-    try:
-        # Name should be like:
-        # "cmr_survey.csv.raw.2016-07-01_to_2024-09-04.csv"
-        # So grab the last part
-        date_range = input_csv.stem.split(".")[-1]
-    except Exception:
-        logger.warning(f"Failed to parse date range from {input_csv}", exc_info=True)
+    # Name should be like:
+    # "cmr_survey.csv.raw.2016-07-01_to_2024-09-04.csv"
+    # or cmr_survey_2016-07-01_to_2024-12-10.csv
+    pattern = r"(\d{4}-\d{2}-\d{2}_to_\d{4}-\d{2}-\d{2})"
+    if match := re.search(pattern, input_csv.stem):
+        date_range = match.group(1)
+    else:
         date_range = None
 
     make_consistent_burst_json(
