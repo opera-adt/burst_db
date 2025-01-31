@@ -41,10 +41,10 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
             f"""
     CREATE TABLE bursts AS
     SELECT
-        LOWER(REPLACE(substring("Granule ID", 18, 15), '-', '_')) AS burst_id_jpl,
+        LOWER(REPLACE(substring("# Granule ID", 18, 15), '-', '_')) AS burst_id_jpl,
         "Temporal Time"::TIMESTAMP AS sensing_time,
         MAX("Revision Time"::TIMESTAMP) AS max_revision_time,
-        FIRST("Granule ID") AS granule_id,
+        FIRST("# Granule ID") AS granule_id,
         granule_id[72:73] AS pol,
         FIRST("Revision-Temporal Delta Hours") AS delta_hours,
         FIRST("revision-id") AS revision_id

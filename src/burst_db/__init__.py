@@ -3,5 +3,8 @@
 from burst_db._version import version as __version__
 
 VERSION_CLEAN = __version__.split("+")[0]
+# 0.7.0.post1.dev8
+VERSION_EXTRA_CLEAN = ".".join(VERSION_CLEAN.split(".")[:3])
+
 
 from . import query_frame_db, query_historical_bursts

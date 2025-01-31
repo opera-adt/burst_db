@@ -8,7 +8,8 @@ SHELL = sh -xv
 # Find the latest CMR survey file
 CMR_SURVEY_TAR := $(shell ls -t cmr_survey*.csv.tar.gz | head -n1)
 # Extract date range from CMR_SURVEY_TAR filename
-DATE_RANGE := $(shell echo $(CMR_SURVEY_TAR) | sed -n 's/.*\.\(.*\)\.csv\.tar\.gz/\1/p')
+# YYYY-mm-dd_to_YYYY-mm-dd
+DATE_RANGE := $(shell echo $(CMR_SURVEY_TAR) | sed -n 's/.*\.\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}_to_[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\).*/\1/p')
 CMR_SURVEY_CSV := cmr_survey_$(DATE_RANGE).csv
 # E.g.:
 # echo cmr_survey.2016-07-01_to_2024-12-10.csv.tar.gz  | sed -n 's/.*\.\(.*\)\.csv\.tar\.gz/\1/p'

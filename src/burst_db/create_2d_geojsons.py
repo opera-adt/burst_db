@@ -1,11 +1,11 @@
 import subprocess
 from pathlib import Path
 
-from burst_db import VERSION_CLEAN, __version__
+from burst_db import VERSION_EXTRA_CLEAN, __version__
 
 
 def create_2d_geojsons(
-    in_file: str = f"opera-s1-disp-{VERSION_CLEAN}.gpkg",
+    in_file: str = f"opera-s1-disp-{VERSION_EXTRA_CLEAN}.gpkg",
 ) -> list[Path]:
     """Create 2D GeoJSON files from a 3D GeoPackage database.
 
@@ -23,7 +23,7 @@ def create_2d_geojsons(
     # Get the burst_db version
     print(f"Burst database software version: {__version__}")
 
-    db_file_2d = f"opera-s1-disp-{VERSION_CLEAN}-2d.gpkg"
+    db_file_2d = f"opera-s1-disp-{VERSION_EXTRA_CLEAN}-2d.gpkg"
     # Check if db_file_2d exists
     if not Path(db_file_2d).is_file():
         print(f"Creating {db_file_2d}")
@@ -74,7 +74,7 @@ FROM frames f
         (sql_query_frame, "frame-geometries-simple"),
         (sql_query_burst_id, "burst-id-geometries-simple"),
     ]:
-        json_file = f"{name}-{VERSION_CLEAN}.geojson"
+        json_file = f"{name}-{VERSION_EXTRA_CLEAN}.geojson"
         zip_file = f"{json_file}.zip"
         cmd = (
             f'ogr2ogr -f GeoJSON -preserve_fid -dialect sqlite -sql "{query}"'

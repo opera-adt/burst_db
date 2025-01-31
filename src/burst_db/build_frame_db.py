@@ -15,7 +15,7 @@ from shapely import GeometryType, STRtree
 from shapely.affinity import translate
 from tqdm.auto import tqdm
 
-from burst_db import VERSION_CLEAN, __version__
+from burst_db import VERSION_EXTRA_CLEAN, __version__
 
 from . import frames
 from ._esa_burst_db import ESA_DB_URL, get_esa_burst_db
@@ -615,7 +615,9 @@ def create_metadata_table(db_path, metadata):
     help="(If using `--optimize-land`): Maximum number of bursts per frame.",
 )
 @click.option(
-    "--outfile", default=f"opera-s1-disp-{VERSION_CLEAN}.gpkg", help="Output file name"
+    "--outfile",
+    default=f"opera-s1-disp-{VERSION_EXTRA_CLEAN}.gpkg",
+    help="Output file name",
 )
 @click.option(
     "--land-buffer-deg",
