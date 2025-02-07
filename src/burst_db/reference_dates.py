@@ -21,47 +21,12 @@ FRAMES_TO_SKIP = {
 }
 
 
-def _generate_month_based_dates(
-    desired_month_by_frame: dict[str, int],
-) -> dict[str, dict[str, list]]:
-    """Generate reference dates on the 1st of the desired month each year.
-
-    Skips additional references for frames in FRAMES_TO_SKIP.
-    """
-    # You can choose a different year range or pass it in as a parameter.
-    START_YEAR = 2016
-    END_YEAR = 2030
-
-    reference_dates = {}
-
-    for frame_id, desired_month in desired_month_by_frame.items():
-        all_dates = []
-        for year in range(START_YEAR, END_YEAR):
-            dt = datetime(year, desired_month, 1)
-            dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
-            all_dates.append(dt_str)
-
-        # If this frame is in FRAMES_TO_SKIP, only keep the first one
-        if frame_id in FRAMES_TO_SKIP:
-            all_dates = all_dates[:1]
-
-        reference_dates[frame_id] = {
-            "reference_dates": all_dates,
-            # In the naive approach, we're not grouping actual acquisitions,
-            # so these remain empty or placeholders
-            "grouped_sensing_times": [],
-            "acquisition_counts": [],
-        }
-
-    return reference_dates
-
-
 def calculate_reference_dates(
     consistent_json_file: str | None = None,
     desired_month_by_frame: dict[str, int] | None = None,
     interval_years: float = 1.0,
     min_acquisitions_per_batch: int = 15,
-) -> dict[str, dict[str, list]]:
+) -> dict[str, list[str]]:
     """Generate reference dates for each DISP-S1 Frame.
 
     If 'desired_month_by_frame' is provided (non-empty), we do a simple
@@ -106,11 +71,40 @@ def calculate_reference_dates(
         )
 
 
+def _generate_month_based_dates(
+    desired_month_by_frame: dict[str, int],
+) -> dict[str, list[str]]:
+    """Generate reference dates on the 1st of the desired month each year.
+
+    Skips additional references for frames in FRAMES_TO_SKIP.
+    """
+    # You can choose a different year range or pass it in as a parameter.
+    START_YEAR = 2016
+    END_YEAR = 2030
+
+    reference_dates: dict[str, list[str]] = {}
+
+    for frame_id, desired_month in desired_month_by_frame.items():
+        all_dates = []
+        for year in range(START_YEAR, END_YEAR):
+            dt = datetime(year, desired_month, 1)
+            dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+            all_dates.append(dt_str)
+
+        # If this frame is in FRAMES_TO_SKIP, only keep the first one
+        if frame_id in FRAMES_TO_SKIP:
+            all_dates = all_dates[:1]
+
+        reference_dates[frame_id] = all_dates
+
+    return reference_dates
+
+
 def _generate_by_consistent(
     consistent_json_file: str | None = None,
     interval_years: float = 1.0,
     min_acquisitions_per_batch: int = 15,
-):
+) -> dict[str, list[str]]:
     if not consistent_json_file:
         raise ValueError(
             "No consistent_json_file provided and no desired_month_by_frame given. "
@@ -123,7 +117,7 @@ def _generate_by_consistent(
         if "data" in consistent_data:
             consistent_data = consistent_data["data"]
 
-    reference_dates: dict[str, dict[str, list]] = {}
+    reference_dates: dict[str, list[str]] = {}
     interval_days = int(interval_years * 365.25)
 
     for frame_id, frame_data in consistent_data.items():
@@ -176,20 +170,13 @@ def _generate_by_consistent(
 
         # Build final structure
         ref_dates_str = [d.strftime("%Y-%m-%dT%H:%M:%S") for d in ref_dates]
-        reference_dates[frame_id] = {
-            "reference_dates": ref_dates_str,
-            "grouped_sensing_times": [
-                [d.strftime("%Y-%m-%dT%H:%M:%S") for d in group]
-                for group in grouped_sensing_times
-            ],
-            "acquisition_counts": [len(group) for group in grouped_sensing_times],
-        }
 
         # Account for frames where we skip the reference change
         if str(frame_id) in FRAMES_TO_SKIP:
-            cur_dates = reference_dates[frame_id]["reference_dates"]
             # Keep only the first reference date
-            reference_dates[frame_id]["reference_dates"] = cur_dates[:1]
+            ref_dates_str = ref_dates_str[:1]
+
+        reference_dates[frame_id] = ref_dates_str
 
     return reference_dates
 
@@ -212,7 +199,7 @@ def _generate_by_consistent(
     "--output",
     help=(
         "Manually name the output JSON file. If not given, defaults to "
-        "'opera-disp-s1-reference-dates-{today}.json'"
+        "'opera-disp-s1-reference-dates-{today}-minimal.json'"
     ),
 )
 @click.option(
@@ -250,6 +237,14 @@ def make_reference_dates(
         desired_month_by_frame=desired_month_by_frame,
     )
 
+    # Choose output names
+    if output is None:
+        today_str = datetime.today().strftime("%Y-%m-%d")
+        output = f"opera-disp-s1-reference-dates-minimal-{today_str}.json"
+
+    def _dt_to_str(obj):
+        return obj.isoformat() if isinstance(obj, datetime) else obj
+
     total_out = {
         "metadata": {
             "generation_time": datetime.today(),
@@ -260,33 +255,10 @@ def make_reference_dates(
         },
         "data": reference_dates,
     }
-
-    # Choose output names
-    if output is None:
-        today_str = datetime.today().strftime("%Y-%m-%d")
-        output_file = f"opera-disp-s1-reference-dates-{today_str}.json"
-        minimal_output_file = f"opera-disp-s1-reference-dates-minimal-{today_str}.json"
-    else:
-        output_file = output
-        minimal_output_file = output_file.replace(".json", "-minimal.json")
-
-    def _dt_to_str(obj):
-        return obj.isoformat() if isinstance(obj, datetime) else obj
-
     # Write the full output
-    with open(output_file, "w") as f:
+    with open(output, "w") as f:
         json.dump(total_out, f, indent=2, default=_dt_to_str)
-    click.echo(f"Reference dates JSON with full sensing times created: {output_file}")
-
-    # Create a "minimal" version: just the reference dates
-    minimal_version = {
-        frame_id: data["reference_dates"] for frame_id, data in reference_dates.items()
-    }
-    minimal_out = total_out.copy()
-    minimal_out["data"] = minimal_version
-    with open(minimal_output_file, "w") as f:
-        json.dump(minimal_out, f, indent=2, default=_dt_to_str)
-    click.echo(f"Minimal reference dates JSON file created: {minimal_output_file}")
+    click.echo(f"Reference dates JSON  created: {output}")
 
 
 def pick_month_based_on_snow(num_blackouts: int) -> int:
