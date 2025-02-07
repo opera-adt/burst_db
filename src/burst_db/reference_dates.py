@@ -24,6 +24,7 @@ def calculate_reference_dates(
     consistent_json_file: str,
     interval_years: float = 1.0,
     min_acquisitions_per_batch: int = 15,
+    desired_month_by_frame: dict[str, int] | None = None,
 ) -> dict[str, dict[str, list]]:
     """Generate reference dates for each DISP-S1 Frame.
 
@@ -35,8 +36,9 @@ def calculate_reference_dates(
         Approximate interval in years between reference dates (default is 1.0).
     min_acquisitions_per_batch : int, optional
         Minimum number of acquisitions required between reference dates (default is 15).
-    event_dates_by_frame : dict[str, list[str]], optional
-        Dictionary of frame IDs to lists of event dates to include as reference dates.
+    desired_month_by_frame : dict[str, list[str]], optional
+        Dictionary of frame IDs to desired month of reference.
+
 
     Returns
     -------
@@ -45,6 +47,18 @@ def calculate_reference_dates(
         grouped sensing times.
 
     """
+    desired_month_by_frame = desired_month_by_frame or {}
+    if desired_month_by_frame:
+        return {
+            fid: [
+                datetime(y, desired_month_by_frame[str(fid)], 1).strftime(
+                    "%Y-%m-%dT%H:%M:%S"
+                )
+                for y in range(2016, 2030)
+            ]
+            for fid in desired_month_by_frame
+        }
+
     with open(consistent_json_file, "r") as f:
         consistent_data = json.load(f)
         # Check if we have the verison with top level metadata/data
@@ -55,6 +69,7 @@ def calculate_reference_dates(
     interval_days = int(interval_years * 365.25)
 
     for frame_id, frame_data in consistent_data.items():
+        desired_month_by_frame.get(str(frame_id), None)
         sensing_times = [
             datetime.strptime(t, "%Y-%m-%dT%H:%M:%S")
             for t in frame_data["sensing_time_list"]
@@ -66,6 +81,8 @@ def calculate_reference_dates(
 
         ref_dates: list[datetime] = []
         grouped_sensing_times = []
+        # Tracking how many dates are between the last reference change and current
+        # sensing time. gets reset with each reference change
         current_group = []
 
         for date in sensing_times:
@@ -96,6 +113,7 @@ def calculate_reference_dates(
                     ref_dates[-1] = date
                     current_group = []
 
+        # Check for excess at the end
         if current_group:
             grouped_sensing_times.append(current_group)
             if len(current_group) < min_acquisitions_per_batch:
@@ -189,3 +207,45 @@ def make_reference_dates(
     with open(minimal_output_file, "w") as f:
         json.dump(minimal_out, f, indent=2, default=_dt_to_str)
     click.echo(f"Minimal reference dates JSON file created: {minimal_output_file}")
+
+
+def pick_month_based_on_snow(num_blackouts: int) -> int:
+    """Pick a desired month based the snow blackout intervals recorded."""
+    if num_blackouts == 0:
+        return 11  # Now snow: November should be safe
+    elif num_blackouts <= 5:
+        return 9  # Frame occasionally sees snow -> September
+    else:
+        return 7  # Much snow -> use July
+
+
+def build_desired_month_map_from_blackout(json_file: str) -> dict[str, int]:
+    """Parse the blackouts JSON and decide the best reference month for each frame.
+
+    Parameters
+    ----------
+    json_file : str
+        Path to the JSON file with blackout info.
+
+    Returns
+    -------
+    dict[str, int]
+        Dictionary mapping frame_id (as string) -> desired month (1..12)
+
+    """
+    with open(json_file, "r") as f:
+        blackout_data = json.load(f)
+
+    # The block of interest is blackout_data["blackout_dates"]
+    frames_blackouts = blackout_data["blackout_dates"]
+
+    desired_month_by_frame = {}
+
+    for frame_id_str, intervals in frames_blackouts.items():
+        # intervals is a list of [start_time, end_time]
+        num_intervals = len(intervals)
+
+        desired_month = pick_month_based_on_snow(num_intervals)
+        desired_month_by_frame[frame_id_str] = desired_month
+
+    return desired_month_by_frame
