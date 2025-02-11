@@ -12,14 +12,6 @@ EVENT_DATES_BY_FRAME = {
     "18903": ["2019-07-06"],
 }
 
-FRAMES_TO_SKIP = {
-    # Hawaii big island:
-    "23211",
-    "23212",
-    "33038",
-    "33039",
-}
-
 
 def calculate_reference_dates(
     consistent_json_file: str | None = None,
@@ -39,13 +31,13 @@ def calculate_reference_dates(
     consistent_json_file : str or None
         Path to the input JSON file with consistent data, or None if we're doing
         month-based references.
+    desired_month_by_frame : dict[str, int], optional
+        Dictionary of frame IDs -> desired reference month (1..12).
+        If given, we do a simple month-based approach.
     interval_years : float, optional
         Approximate interval in years between reference dates (default is 1.0).
     min_acquisitions_per_batch : int, optional
         Minimum number of acquisitions required between reference dates (default is 15).
-    desired_month_by_frame : dict[str, int], optional
-        Dictionary of frame IDs -> desired reference month (1..12). If given, we do
-        the simple month-based approach.
 
     Returns
     -------
@@ -55,15 +47,11 @@ def calculate_reference_dates(
 
     """
     if desired_month_by_frame:
-        # ----------------------------
         # If we have a desired_month_by_frame, do the simple "month-based" approach
-        # ----------------------------
         return _generate_month_based_dates(desired_month_by_frame)
     else:
-        # --------------------------------------------------
-        # Otherwise, do the logic based on the
-        # consistent_json_file acquisitions
-        # --------------------------------------------------
+        # Otherwise, do the logic based on the actual data contained in
+        # the consistent_json_file
         return _generate_by_consistent(
             consistent_json_file,
             interval_years=interval_years,
@@ -73,27 +61,21 @@ def calculate_reference_dates(
 
 def _generate_month_based_dates(
     desired_month_by_frame: dict[str, int],
+    start_year: int = 2016,
+    end_year: int = 2030,
 ) -> dict[str, list[str]]:
     """Generate reference dates on the 1st of the desired month each year.
 
     Skips additional references for frames in FRAMES_TO_SKIP.
     """
-    # You can choose a different year range or pass it in as a parameter.
-    START_YEAR = 2016
-    END_YEAR = 2030
-
     reference_dates: dict[str, list[str]] = {}
 
     for frame_id, desired_month in desired_month_by_frame.items():
         all_dates = []
-        for year in range(START_YEAR, END_YEAR):
+        for year in range(start_year, end_year):
             dt = datetime(year, desired_month, 1)
             dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
             all_dates.append(dt_str)
-
-        # If this frame is in FRAMES_TO_SKIP, only keep the first one
-        if frame_id in FRAMES_TO_SKIP:
-            all_dates = all_dates[:1]
 
         reference_dates[frame_id] = all_dates
 
@@ -142,9 +124,8 @@ def _generate_by_consistent(
 
             current_group.append(date)
 
-            is_interval_passed = (date - ref_dates[0]).days >= len(
-                ref_dates
-            ) * interval_days
+            current_interval = (date - ref_dates[0]).days
+            is_interval_passed = current_interval >= len(ref_dates) * interval_days
             is_event_date = date.date() in [ed.date() for ed in frame_event_dates]
 
             if is_interval_passed or is_event_date:
@@ -181,9 +162,6 @@ def _generate_by_consistent(
     return reference_dates
 
 
-# --------------------------------------------------------------------------------
-# CLI portion
-# --------------------------------------------------------------------------------
 @click.command()
 @click.argument("consistent_json_file", required=False, type=click.Path(exists=True))
 @click.option(
