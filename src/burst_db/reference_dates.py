@@ -64,10 +64,7 @@ def _generate_month_based_dates(
     start_year: int = 2016,
     end_year: int = 2030,
 ) -> dict[str, list[str]]:
-    """Generate reference dates on the 1st of the desired month each year.
-
-    Skips additional references for frames in FRAMES_TO_SKIP.
-    """
+    """Generate reference dates on the 1st of the desired month each year."""
     reference_dates: dict[str, list[str]] = {}
 
     for frame_id, desired_month in desired_month_by_frame.items():
@@ -151,11 +148,6 @@ def _generate_by_consistent(
 
         # Build final structure
         ref_dates_str = [d.strftime("%Y-%m-%dT%H:%M:%S") for d in ref_dates]
-
-        # Account for frames where we skip the reference change
-        if str(frame_id) in FRAMES_TO_SKIP:
-            # Keep only the first reference date
-            ref_dates_str = ref_dates_str[:1]
 
         reference_dates[frame_id] = ref_dates_str
 
