@@ -162,7 +162,7 @@ def _generate_by_consistent(
     default=None,
     help=(
         "Path to blackout JSON file. If given, use month-based references derived"
-        " from snow blackouts.",
+        " from snow blackouts."
     ),
 )
 @click.option(

@@ -1,5 +1,5 @@
 # Configuration
-VERSION := 0.7.0
+VERSION := 0.8.0
 BLACKOUT_FILE := opera-disp-s1-blackout-dates-2024-10-16.json
 DATE := $(shell date +%Y-%m-%d)
 # Verbosely echo commands
