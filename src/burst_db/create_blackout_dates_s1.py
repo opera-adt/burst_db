@@ -93,3 +93,9 @@ def gdf_to_blackout_json(input_file: Path | str) -> dict:
     logger.info(f"JSON file created: {output_filename}")
 
     return result
+
+
+if __name__ == "__main__":
+    import sys
+
+    gdf_to_blackout_json(sys.argv[1])
