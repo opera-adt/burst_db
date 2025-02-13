@@ -37,8 +37,8 @@ $(CONSISTENT_BURSTS): $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg
 	opera-db make-burst-catalog --blackout-file $(BLACKOUT_FILE) $^ > $@
 
 # Make reference dates
-$(REFERENCE_DATES): $(CONSISTENT_BURSTS)
-	opera-db make-reference-dates --output $@ $<
+$(REFERENCE_DATES): $(BLACKOUT_FILE)
+	opera-db make-reference-dates --output $@ --blackout-file $(BLACKOUT_FILE)
 
 # Clean up intermediate files
 clean:

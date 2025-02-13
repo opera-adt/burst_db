@@ -155,7 +155,7 @@ def _generate_by_consistent(
 
 
 @click.command()
-@click.argument("consistent_json_file", required=False, type=click.Path(exists=True))
+@click.option("--consistent-json-file", type=click.Path(exists=True))
 @click.option(
     "--blackout-file",
     type=click.Path(exists=True),
@@ -199,6 +199,7 @@ def make_reference_dates(
     desired_month_by_frame = None
     if blackout_file:
         desired_month_by_frame = build_desired_month_map_from_blackout(blackout_file)
+        click.echo("Using blackout file to pick reference dates")
 
     reference_dates = calculate_reference_dates(
         consistent_json_file=consistent_json_file,
