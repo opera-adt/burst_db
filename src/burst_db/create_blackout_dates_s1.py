@@ -4,13 +4,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import geopandas as gpd
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 
 def gdf_to_blackout_json(input_file: Path | str) -> dict:
     """Create a JSON of blackout periods for DISP-S1.
+
+    Convert a GeoJSON file with year, month, frame_id, and to_process information
+    into a JSON with blackout dates.
 
     Parameters
     ----------
@@ -38,21 +40,23 @@ def gdf_to_blackout_json(input_file: Path | str) -> dict:
         frame_dates = []
         blackout_start = None
 
-        # Sort the group by start_date
-        group_sorted = group.sort_values("start_date")
+        # Sort the group by year and month
+        group_sorted = group.sort_values(["year", "month"])
 
         for _, row in group_sorted.iterrows():
-            start_date = pd.to_datetime(row["start_date"])
-            pd.to_datetime(row["end_date"])
+            year = int(row["year"])
+            month = int(row["month"])
             to_process = int(row["to_process"])
+
+            current_date = datetime(year, month, 1)
 
             if to_process == 0:
                 if blackout_start is None:
-                    blackout_start = start_date
+                    blackout_start = current_date
             else:
                 if blackout_start is not None:
-                    # End the blackout period at the end of the previous day
-                    blackout_end = start_date - timedelta(days=1)
+                    # End the blackout period at the very end of the previous month
+                    blackout_end = current_date - timedelta(days=1)
                     blackout_end = blackout_end.replace(hour=23, minute=59, second=59)
                     frame_dates.append(
                         [blackout_start.isoformat(), blackout_end.isoformat()]
@@ -64,7 +68,7 @@ def gdf_to_blackout_json(input_file: Path | str) -> dict:
             frame_dates.append(
                 [
                     blackout_start.isoformat(),
-                    group_sorted.iloc[-1]["end_date"].isoformat(),
+                    str(group_sorted.iloc[-1]["year"]) + "-12-31",
                 ]
             )
 
@@ -89,3 +93,9 @@ def gdf_to_blackout_json(input_file: Path | str) -> dict:
     logger.info(f"JSON file created: {output_filename}")
 
     return result
+
+
+if __name__ == "__main__":
+    import sys
+
+    gdf_to_blackout_json(sys.argv[1])
