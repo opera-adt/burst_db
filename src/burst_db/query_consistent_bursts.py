@@ -175,13 +175,13 @@ def urls_for_frame(
 
     FRAME_ID: The frame ID to retrieve URLs for (e.g., "831").
     """
-    urls = get_urls_for_frame(
+    urls = sorted(get_urls_for_frame(
         frame_id=frame_id,
         json_file=json_file,
         output_type=output_type,
         start_date=start_date if start_date else None,
         end_date=end_date if end_date else None,
-    )
+    ))
     if not ministack_size:
         ministack_size = len(urls)
 
