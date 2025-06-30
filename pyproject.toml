@@ -88,6 +88,7 @@ ignore = [
   "PTH207", # "Replace `glob` with `Path.glob` or `Path.rglob`
   "ISC001", # The following rules may cause conflicts when used with the formatter
   "TRY003", # Avoid specifying long messages outside the exception
+  "PLC0415",# import should be at top level
 ]
 
 exclude = ["scripts"]

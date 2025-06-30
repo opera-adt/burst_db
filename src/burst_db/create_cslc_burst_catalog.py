@@ -94,7 +94,8 @@ def fetch_bursts(db_file: Path | str):
         DataFrame containing the fetched bursts.
 
     """
-    query = """
+    australian_sample_frames = (31577, 39355, 39360, 39362, 43655)
+    query = f"""
     SELECT
       frame_id,
       burst_id_jpl,
@@ -103,6 +104,7 @@ def fetch_bursts(db_file: Path | str):
       bursts_with_frame_ids
     WHERE
       burst_is_north_america
+      OR frame_id in {australian_sample_frames}
     ORDER BY
       frame_id,
       burst_id_jpl,
