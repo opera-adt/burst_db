@@ -127,9 +127,9 @@ def get_urls_for_frame(
 @click.option(
     "--json-file",
     type=click.Path(exists=True, dir_okay=False, readable=True),
-    default="opera-disp-s1-consistent-burst-ids-2016-07-01_to_2024-09-04.json",
+    default=None,
     show_default=True,
-    help="Path to the JSON file containing frame ID mappings.",
+    help="Path to the consistent-burst-ids JSON file containing frame ID mappings.",
 )
 @click.option(
     "--output-type",
@@ -175,15 +175,30 @@ def urls_for_frame(
 
     FRAME_ID: The frame ID to retrieve URLs for (e.g., "831").
     """
-    urls = sorted(
-        get_urls_for_frame(
-            frame_id=frame_id,
-            json_file=json_file,
-            output_type=output_type,
-            start_date=start_date if start_date else None,
-            end_date=end_date if end_date else None,
+    if json_file is None:
+        import opera_utils.download
+
+        results = opera_utils.download.search_l2(
+            start=start_date,
+            end=end_date,
+            burst_ids=opera_utils.get_burst_ids_for_frame(frame_id),
+            product=opera_utils.download.L2Product.CSLC,
+            max_results=10_000,
         )
-    )
+        missing_data_options = opera_utils.get_missing_data_options(
+            slc_files=sorted(opera_utils.download.get_urls(results, type_=output_type))
+        )
+        urls = missing_data_options[0].inputs
+    else:
+        urls = sorted(
+            get_urls_for_frame(
+                frame_id=frame_id,
+                json_file=json_file,
+                output_type=output_type,
+                start_date=start_date if start_date else None,
+                end_date=end_date if end_date else None,
+            )
+        )
     if not ministack_size:
         ministack_size = len(urls)
 
