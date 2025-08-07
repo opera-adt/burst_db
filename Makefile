@@ -1,6 +1,6 @@
 # Configuration
-VERSION := 0.10.0
-BLACKOUT_FILE := opera-disp-s1-blackout-dates-2025-02-13.json
+VERSION := 0.11.0
+BLACKOUT_FILE := snow_analysis/opera-disp-s1-blackout-dates-2025-08-06.json
 DATE := $(shell date +%Y-%m-%d)
 # Verbosely echo commands
 SHELL = sh -xv
