@@ -1,6 +1,6 @@
 # Configuration
 VERSION := 0.11.0
-BLACKOUT_FILE := snow_analysis/opera-disp-s1-blackout-dates-2025-08-06.json
+SNOW_PARQUET := ../snow_analysis/opera-region4-snow-analysis.parquet
 DATE := $(shell date +%Y-%m-%d)
 # Verbosely echo commands
 SHELL = sh -xv
@@ -30,6 +30,10 @@ opera-s1-disp-$(VERSION).gpkg:
 # Extract CMR survey
 $(CMR_SURVEY_CSV): $(CMR_SURVEY_TAR)
 	tar -xzf $< -O > $@
+
+BLACKOUT_FILE := opera-disp-s1-blackout-dates-$(DATE).json
+$(BLACKOUT_FILE): $(SNOW_PARQUET)
+	opera-db create-blackout $(SNOW_PARQUET)
 
 # Make burst catalog
 # WANT THIS TO BE LIKE: opera-disp-s1-consistent-burst-ids-2024-10-11-2016-07-01_to_2024-09-04.json
