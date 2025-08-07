@@ -36,8 +36,11 @@ $(BLACKOUT_FILE): $(SNOW_PARQUET)
 	opera-db create-blackout $(SNOW_PARQUET)
 
 # Make burst catalog
-# WANT THIS TO BE LIKE: opera-disp-s1-consistent-burst-ids-2024-10-11-2016-07-01_to_2024-09-04.json
+# E.g.: opera-disp-s1-consistent-burst-ids-2024-10-11-2016-07-01_to_2024-09-04.json
+# Also we make one without blackout dates for comparison
 $(CONSISTENT_BURSTS): $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg $(BLACKOUT_FILE)
+	opera-db make-burst-catalog $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg
+	mv $(BLACKOUT_FILE) opera-disp-s1-consistent-burst-ids-no-blackout.json
 	opera-db make-burst-catalog --blackout-file $(BLACKOUT_FILE)  $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg > $@
 
 # Make reference dates

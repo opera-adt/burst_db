@@ -5,6 +5,7 @@ from pathlib import Path
 
 import click
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,8 @@ def _yearly_windows(
 
 
 def snow_months_to_blackout_json(
-    input_file: Path | str, max_default_duration: float = 240
+    input_file: Path | str,
+    max_default_duration: float = 180,
 ) -> dict:
     """Create a JSON of blackout periods for DISP-S1 from `snow_month_filter` outputs.
 
@@ -90,7 +92,7 @@ def snow_months_to_blackout_json(
     max_default_duration : float
         The maximum number of days to blackout before switching to the
         more aggressive mode (the mode which keeps more data).
-        Default is 240 (8/12 months).
+        Default is 180 (6 months).
 
     Returns
     -------
@@ -119,28 +121,36 @@ def snow_months_to_blackout_json(
     # Load the snow-analysis table
     gdf = gpd.read_parquet(input_file)
 
-    # Decide which window we want
-    default, backup = "median", "aggressive"
+    use_aggressive_mask = gdf.blackout_duration_median > max_default_duration
+    gdf["start_selected"] = np.where(
+        use_aggressive_mask,
+        gdf["start_aggressive"],
+        gdf["start_median"],
+    )
+    gdf["end_selected"] = np.where(
+        use_aggressive_mask,
+        gdf["end_aggressive"],
+        gdf["end_median"],
+    )
+    gdf["blackout_duration_selected"] = np.where(
+        use_aggressive_mask,
+        gdf["blackout_duration_aggressive"],
+        gdf["blackout_duration_median"],
+    )
+    gdf["mode_selected"] = np.where(use_aggressive_mask, "aggressive", "median")
 
     # Span of calendar years to pre-compute
     years = range(2015, 2030)
 
     blackout_dates: dict[str, list[list[str]]] = {}
     for tup in gdf.itertuples():
-        # Check the duration
-        default_duration = getattr(tup, f"blackout_duration_{default}")
-        backup_duration = getattr(tup, f"blackout_duration_{backup}")
-        if backup_duration > max_default_duration:
-            logger.warning(f"{tup.frame_id} has backup duration {backup_duration}")
-        selected = default if default_duration < max_default_duration else backup
-        start_ts: pd.Timestamp = getattr(tup, f"start_{selected}")
-        end_ts: pd.Timestamp = getattr(tup, f"end_{selected}")
-
         # skip rows missing a valid window
-        if pd.isna(start_ts) or pd.isna(end_ts):
+        if pd.isna(tup.start_selected) or pd.isna(tup.end_selected):
             continue
 
-        blackout_dates[str(tup.frame_id)] = _yearly_windows(start_ts, end_ts, years)
+        blackout_dates[str(tup.frame_id)] = _yearly_windows(
+            tup.start_selected, tup.end_selected, years
+        )
 
     result["blackout_dates"] = blackout_dates
 
@@ -272,10 +282,14 @@ def gdf_to_blackout_json(input_file: Path | str) -> dict:
 @click.command()
 @click.argument("input_file")
 @click.option("--max-default-duration", default=240.0)
-def create_blackout(input_file: Path | str, max_default_duration: float = 240.0):
+def create_blackout(
+    input_file: Path | str,
+    max_default_duration: float = 240.0,
+):
     """Create blackout periods JSON for DISP-S1 from `snow_month_filter` outputs."""
     return snow_months_to_blackout_json(
-        input_file=input_file, max_default_duration=max_default_duration
+        input_file=input_file,
+        max_default_duration=max_default_duration,
     )
 
 
