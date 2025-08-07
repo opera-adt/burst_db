@@ -5,19 +5,19 @@ Uses GFS temperature & categorical-snow fields.
 The module expects two inputs that you already have saved
 
 * ``ds`` - an ``xarray.Dataset`` holding at least:
-    - ``SNOWC``    - categorical/accumulated snow (0/1 or mm) on the GFS grid.
-    - ``TMP``      - surface temperature (K).
-    - ``time`` dim - hourly steps (or similar).
+    - ``categorical_snow_surface``    - categorical/accumulated snow (0/1) per pixel.
+    - ``temperature_2m``      - surface temperature (C).
+    - ``time`` dim - 6 hour steps
     - ``latitude``/``longitude`` dims - regular 0.25° GFS grid.
 
-* ``frames_gdf`` - ``geopandas.GeoDataFrame`` from the priority listing.
+* ``frames_gdf`` - ``geopandas.GeoDataFrame`` from the Frame priority listing.
 
 """
 
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Literal, Tuple
+from typing import Literal
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -60,7 +60,6 @@ def aggregate_weather(
     else:
         snow_roll = ds_daily_snow[snow_var].resample(time=win).max()
 
-    # tmp_roll = ds_daily[temp_var].rolling(time=win, min_periods=1).min()
     tmin = ds_daily_temp.resample(time=win).min()
     tmax = ds_daily_temp.resample(time=win).max()
 
@@ -69,7 +68,6 @@ def aggregate_weather(
     return out
 
 
-# 2.  Decide which *days* are bad per grid point, then upsample to months
 def bad_month_mask(
     agg: xr.Dataset,
     *,
@@ -89,22 +87,14 @@ def bad_month_mask(
     return bad
 
 
-###############################################################################
-# 3.  Map weather mask onto each DISP-S1 frame & extract months to drop
-###############################################################################
-
-
 def _subset_mask_to_frame(mask: xr.DataArray, poly: Polygon) -> xr.DataArray:
     """Clip the *mask* to pixel centers inside *poly*."""
     mask["latitude"]
     mask["longitude"]
-    # quick bounding-box filter to speed things up
     sub = mask.sel(
         latitude=slice(poly.bounds[3], poly.bounds[1]),
         longitude=slice(poly.bounds[0], poly.bounds[2]),
     )
-    # build boolean mask of gridpoints inside polygon
-    # broadcasting longitude (x) vs latitude (y)
     yy, xx = np.meshgrid(sub["latitude"].values, sub["longitude"].values, indexing="ij")
     pts = gpd.GeoSeries(
         gpd.points_from_xy(xx.ravel(), yy.ravel()), index=pd.RangeIndex(xx.size)
@@ -114,9 +104,6 @@ def _subset_mask_to_frame(mask: xr.DataArray, poly: Polygon) -> xr.DataArray:
     return sub.where(inside_mask)
 
 
-###############################################################################
-# 4.  Diagnostics / plots / persistence
-###############################################################################
 def daily_bad_fraction(mask: xr.DataArray, poly: Polygon) -> pd.Series:
     """Return Series indexed by date with fraction of pixels flagged bad."""
     sub = _subset_mask_to_frame(mask, poly)
@@ -152,120 +139,6 @@ def plot_frame_timeline(
     return ax
 
 
-###############################################################################
-# 5.  Convert daily mask → blackout ranges
-###############################################################################
-
-
-def blackout_runs_old(
-    frac_series: pd.Series,
-    *,
-    mask_fraction: float = 0.5,
-    min_consecutive: int = 5,
-    max_gap: int = 7,
-) -> List[Tuple[pd.Timestamp, pd.Timestamp]]:
-    """Return contiguous [start, end] blackout runs.
-
-    Parameters
-    ----------
-    frac_series : pd.Series
-        Fraction of pixels flagged bad for *one* frame (index = dates).
-    mask_fraction : float
-        Week is considered *bad* if fraction ≥ this value.
-    min_consecutive : int
-        Keep runs that last **at least** this many weeks.
-    max_gap : int
-        Allow up to this many **good** weeks inside a winter run.  Setting
-        ``max_gap=7`` swallows a random January thaw so the window stays
-        continuous.
-
-    """
-    # 1️⃣ basic bad/good boolean mask
-    bad = frac_series >= mask_fraction
-
-    # 2️⃣ swallow good streaks shorter than *max_gap*
-    if max_gap > 0:
-        good = ~bad
-        grp_id = (good != good.shift()).cumsum()
-        grp_sizes = good.groupby(grp_id).transform("size")
-        short_good = good & (grp_sizes <= max_gap)
-        bad = bad | short_good
-
-    # 3️⃣ find run boundaries
-    diff = bad.astype(int).diff().fillna(0)
-    starts = bad.index[diff == 1]
-    ends = bad.index[diff == -1] - pd.Timedelta(days=1)
-    if bad.iloc[0]:
-        starts = starts.insert(0, bad.index[0])
-    if bad.iloc[-1]:
-        ends = ends.append(pd.Index([bad.index[-1]]))
-
-    runs: List[Tuple[pd.Timestamp, pd.Timestamp]] = []
-    for s, e in zip(starts, ends):
-        if (e - s).days + 1 >= min_consecutive:
-            runs.append((s, e))
-    return runs
-
-
-def blackout_runs(
-    frac_series: pd.Series,
-    *,
-    mask_fraction: float = 0.5,
-    min_consecutive: int = 5,
-    max_gap: int = 7,
-    max_run_len: int = 330,  # <-- NEW PARAMETER
-) -> List[Tuple[pd.Timestamp, pd.Timestamp]]:
-    """Return contiguous [start, end] blackout runs.
-
-    Parameters.
-    ----------
-    frac_series : pd.Series
-        Fraction of pixels flagged bad for *one* frame (index = dates).
-    mask_fraction : float
-        Day is considered *bad* if fraction ≥ this value.
-    min_consecutive : int
-        Keep runs that last **at least** this many weeks.
-    max_gap : int
-        Allow up to this many **good** weeks inside a winter run.
-    max_run_len : int
-        Reject runs that last longer than this many weeks. A "run" spanning
-        more than ~11 months is likely an artifact of bridging a summer.
-
-    """
-    # 1️⃣ Basic bad/good boolean mask
-    bad = frac_series >= mask_fraction
-
-    # 2️⃣ Swallow good streaks shorter than *max_gap*
-    if max_gap > 0:
-        good = ~bad
-        grp_id = (good != good.shift()).cumsum()
-        grp_sizes = good.groupby(grp_id).transform("size")
-        short_good = good & (grp_sizes <= max_gap)
-        bad = bad | short_good
-
-    # 3️⃣ Find run boundaries
-    diff = bad.astype(int).diff().fillna(0)
-    starts = bad.index[diff == 1]
-    ends = bad.index[diff == -1] - pd.Timedelta(days=1)
-
-    if bad.iloc[0]:
-        starts = starts.insert(0, bad.index[0])
-    if bad.iloc[-1]:
-        ends = ends.append(pd.Index([bad.index[-1]]))
-
-    runs: List[Tuple[pd.Timestamp, pd.Timestamp]] = []
-    for s, e in zip(starts, ends):
-        duration = (e - s).days + 1
-        # ✅ THE FIX: Ensure duration is within a valid range
-        if min_consecutive <= duration <= max_run_len:
-            runs.append((s, e))
-
-    return runs
-
-
-# ['aggressive','median','conservative']
-
-
 class Mode(Enum):
     """Enumeration for blackout summarization modes."""
 
@@ -275,11 +148,11 @@ class Mode(Enum):
 
 
 def summarize_blackouts(
-    runs: List[Tuple[pd.Timestamp, pd.Timestamp]],
+    runs: list[tuple[pd.Timestamp, pd.Timestamp]],
     *,
     mode: Mode | str = Mode.MEDIAN,
     pivot_month: int = 7,
-) -> Tuple[pd.Timestamp, pd.Timestamp]:
+) -> tuple[pd.Timestamp, pd.Timestamp]:
     """Collapse winter *runs* into a single blackout window that respects the year wrap.
 
     We map every date onto a *pivot* water-year that starts on ``pivot_month``

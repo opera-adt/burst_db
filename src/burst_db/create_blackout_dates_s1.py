@@ -3,7 +3,9 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import click
 import geopandas as gpd
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,35 @@ def gdf_to_blackout_json(input_file: Path | str) -> dict:
 
     Convert a GeoJSON file with year, month, frame_id, and to_process information
     into a JSON with blackout dates.
+
+    Output format is the following:
+
+        {
+        "metadata": {
+            "generation_time": "2025-02-13T14:54:35.966369",
+            "input_file": "blockout_snow_disp_s1.geojson",
+            "output_file": "opera-disp-s1-blackout-dates-2025-02-13.json"
+        },
+        "blackout_dates": {
+            "95": [
+            [
+                "2016-11-01T00:00:00",
+                "2017-05-31T23:59:59"
+            ],
+            ...
+            [
+                "2023-11-01T00:00:00",
+                "2024-05-31T23:59:59"
+            ]
+            ],
+            "96": [
+            [
+                "2016-11-01T00:00:00",
+                "2017-02-28T23:59:59"
+                ...
+
+    Each DISP-S1 frame contains a date range where CSLCs should be excluded
+    due to snow cover (or, for the case of Central America, extreme rainy season).
 
     Parameters
     ----------
@@ -95,7 +126,176 @@ def gdf_to_blackout_json(input_file: Path | str) -> dict:
     return result
 
 
+def _yearly_windows(
+    start_ts: pd.Timestamp,
+    end_ts: pd.Timestamp,
+    years: range,
+) -> list[list[str]]:
+    """Generate blackout windows for every year in *years*.
+
+    If the end month/day occurs *earlier* in the calendar than the start
+    month/day (e.g. Nov-01 ➜ May-31), the end year is `year + 1`.
+    """
+    s_month, s_day = start_ts.month, start_ts.day
+    e_month, e_day = end_ts.month, end_ts.day
+
+    windows: list[list[str]] = []
+    for yr in years:
+        start = pd.Timestamp(year=yr, month=s_month, day=s_day)
+        end_year = yr + (e_month < s_month or (e_month == s_month and e_day < s_day))
+        end = pd.Timestamp(year=end_year, month=e_month, day=e_day) + pd.Timedelta(
+            hours=23, minutes=59, seconds=59
+        )
+        windows.append([start.isoformat(), end.isoformat()])
+    return windows
+
+
+def snow_months_to_blackout_json(
+    input_file: Path | str, max_default_duration: float = 240
+) -> dict:
+    """Create a JSON of blackout periods for DISP-S1 from `snow_month_filter` outputs.
+
+    The input dataframe has the follow fields for each row ():
+    frame_id                                                                      18899
+    region_name                                                                  Nevada
+    priority                                                                        4.0
+    ...
+    start_aggressive                                                2001-01-31 00:00:00
+    end_aggressive                                                  2001-03-28 00:00:00
+    start_median                                                    2001-01-02 00:00:00
+    end_median                                                      2001-04-02 00:00:00
+    start_conservative                                              2000-11-03 00:00:00
+    end_conservative                                                2001-04-17 00:00:00
+    blackout_duration_aggressive                                                   56.0
+    blackout_duration_median                                                       90.0
+    blackout_duration_conservative                                                165.0
+
+    Output format is the following:
+
+        {
+        "metadata": {
+            "generation_time": "2025-02-13T14:54:35.966369",
+            "input_file": "blockout_snow_disp_s1.geojson",
+            "output_file": "opera-disp-s1-blackout-dates-2025-02-13.json"
+        },
+        "blackout_dates": {
+            "95": [
+            [
+                "2016-11-01T00:00:00",
+                "2017-05-31T23:59:59"
+            ],
+            ...
+            [
+                "2023-11-01T00:00:00",
+                "2024-05-31T23:59:59"
+            ]
+            ],
+            "96": [
+            [
+                "2016-11-01T00:00:00",
+                "2017-02-28T23:59:59"
+                ...
+
+    Each DISP-S1 frame contains a date range where CSLCs should be excluded
+    due to snow cover (or, for the case of Central America, extreme rainy season).
+
+    Parameters
+    ----------
+    input_file : str
+        The path to the input GeoJSON file.
+    max_default_duration : float
+        The maximum number of days to blackout before switching to the
+        more aggressive mode (the mode which keeps more data).
+        Default is 240 (8/12 months).
+
+    Returns
+    -------
+    dict
+        A dictionary containing the blackout dates for each frame_id and metadata.
+
+    Notes
+    -----
+    This function reads a GeoJSON file, processes it to create blackout dates
+    for periods where to_process is 0, saves the result to a JSON file,
+    and returns the resulting dictionary.
+
+    """
+    generation_time = datetime.now().strftime("%Y-%m-%d")
+    output_filename = f"opera-disp-s1-blackout-dates-{generation_time}.json"
+
+    result: dict = {
+        "metadata": {
+            "generation_time": datetime.now().isoformat(),
+            "max_default_duration": max_default_duration,
+            "input_file": Path(input_file).name,
+            "output_file": output_filename,
+        },
+    }
+
+    # ------------------------------------------------------------------
+    # 1.  Load the snow-analysis table
+    # ------------------------------------------------------------------
+    gdf = (
+        gpd.read_parquet(input_file)
+        if Path(input_file).suffix.lower() == ".parquet"
+        else gpd.read_file(input_file)
+    )
+
+    # ------------------------------------------------------------------
+    # 2.  Decide which window you want to use
+    # ------------------------------------------------------------------
+
+    default, backup = "median", "aggressive"
+
+    # Span of calendar years to pre-compute
+    years = range(2015, 2030)
+
+    # ------------------------------------------------------------------
+    # 3.  Build the blackout_dates dictionary
+    # ------------------------------------------------------------------
+    blackout_dates: dict[str, list[list[str]]] = {}
+    for tup in gdf.itertuples():
+        # Check the duration
+        default_duration = getattr(tup, f"blackout_duration_{default}")
+        # backup_duration = getattr(tup, f"blackout_duration_{backup}")
+        selected = default if default_duration < max_default_duration else backup
+        start_ts: pd.Timestamp = getattr(tup, f"start_{selected}")
+        end_ts: pd.Timestamp = getattr(tup, f"end_{selected}")
+
+        # skip rows missing a valid window
+        if pd.isna(start_ts) or pd.isna(end_ts):
+            continue
+
+        blackout_dates[str(tup.frame_id)] = _yearly_windows(start_ts, end_ts, years)
+
+    result["blackout_dates"] = blackout_dates
+
+    # ------------------------------------------------------------------
+    # 4.  Persist to disk
+    # ------------------------------------------------------------------
+    with open(output_filename, "w") as f:
+        json.dump(result, f, indent=2)
+
+    logger.info(
+        "Blackout JSON created: %s (%d frames)", output_filename, len(blackout_dates)
+    )
+    return result
+
+
+@click.command()
+@click.argument("input_file")
+@click.option("--max-default-duration", default=240.0)
+def create_blackout(input_file: Path | str, max_default_duration: float = 240.0):
+    """Create blackout periods JSON for DISP-S1 from `snow_month_filter` outputs."""
+    return snow_months_to_blackout_json(
+        input_file=input_file, max_default_duration=max_default_duration
+    )
+
+
 if __name__ == "__main__":
     import sys
 
-    gdf_to_blackout_json(sys.argv[1])
+    try:
+        snow_months_to_blackout_json(sys.argv[1])
+    except:  # noqa: E722
+        gdf_to_blackout_json(sys.argv[1])

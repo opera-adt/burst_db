@@ -12,6 +12,9 @@ EVENT_DATES_BY_FRAME = {
     "18903": ["2019-07-06"],
 }
 
+TARGET_DATES_BY_FRAME: dict[str, list[str]] = {}
+# Load the region 3B central america frames
+
 
 def calculate_reference_dates(
     consistent_json_file: str | None = None,
