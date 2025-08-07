@@ -1,6 +1,6 @@
 # Configuration
-VERSION := 0.10.0
-BLACKOUT_FILE := opera-disp-s1-blackout-dates-2025-02-13.json
+VERSION := 0.11.0
+SNOW_PARQUET := ../snow-analysis/opera-region4-snow-analysis.parquet
 DATE := $(shell date +%Y-%m-%d)
 # Verbosely echo commands
 SHELL = sh -xv
@@ -31,10 +31,17 @@ opera-s1-disp-$(VERSION).gpkg:
 $(CMR_SURVEY_CSV): $(CMR_SURVEY_TAR)
 	tar -xzf $< -O > $@
 
+BLACKOUT_FILE := opera-disp-s1-blackout-dates-$(DATE).json
+$(BLACKOUT_FILE): $(SNOW_PARQUET)
+	opera-db create-blackout $(SNOW_PARQUET)
+
 # Make burst catalog
-# WANT THIS TO BE LIKE: opera-disp-s1-consistent-burst-ids-2024-10-11-2016-07-01_to_2024-09-04.json
-$(CONSISTENT_BURSTS): $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg
-	opera-db make-burst-catalog --blackout-file $(BLACKOUT_FILE) $^ > $@
+# E.g.: opera-disp-s1-consistent-burst-ids-2024-10-11-2016-07-01_to_2024-09-04.json
+# Also we make one without blackout dates for comparison
+$(CONSISTENT_BURSTS): $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg $(BLACKOUT_FILE)
+	opera-db make-burst-catalog $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg
+	mv $(CONSISTENT_BURSTS) opera-disp-s1-consistent-burst-ids-no-blackout.json
+	opera-db make-burst-catalog --blackout-file $(BLACKOUT_FILE)  $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg
 
 # Make reference dates
 $(REFERENCE_DATES): $(BLACKOUT_FILE)

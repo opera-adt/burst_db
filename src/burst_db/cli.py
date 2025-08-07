@@ -3,6 +3,7 @@ import logging
 import click
 
 from .build_frame_db import create
+from .create_blackout_dates_s1 import create_blackout
 from .create_cslc_burst_catalog import make_burst_catalog
 from .query_consistent_bursts import urls_for_frame
 from .query_frame_db import intersect, lookup
@@ -30,6 +31,7 @@ cli_app.add_command(lookup)
 cli_app.add_command(make_burst_catalog)
 cli_app.add_command(urls_for_frame)
 cli_app.add_command(make_reference_dates)
+cli_app.add_command(create_blackout)
 
 
 @click.group()
