@@ -40,8 +40,8 @@ $(BLACKOUT_FILE): $(SNOW_PARQUET)
 # Also we make one without blackout dates for comparison
 $(CONSISTENT_BURSTS): $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg $(BLACKOUT_FILE)
 	opera-db make-burst-catalog $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg
-	mv $(BLACKOUT_FILE) opera-disp-s1-consistent-burst-ids-no-blackout.json
-	opera-db make-burst-catalog --blackout-file $(BLACKOUT_FILE)  $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg > $@
+	mv $(CONSISTENT_BURSTS) opera-disp-s1-consistent-burst-ids-no-blackout.json
+	opera-db make-burst-catalog --blackout-file $(BLACKOUT_FILE)  $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg
 
 # Make reference dates
 $(REFERENCE_DATES): $(BLACKOUT_FILE)
