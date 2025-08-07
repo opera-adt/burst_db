@@ -1,6 +1,6 @@
 # Configuration
 VERSION := 0.11.0
-SNOW_PARQUET := ../snow_analysis/opera-region4-snow-analysis.parquet
+SNOW_PARQUET := ../snow-analysis/opera-region4-snow-analysis.parquet
 DATE := $(shell date +%Y-%m-%d)
 # Verbosely echo commands
 SHELL = sh -xv
@@ -37,8 +37,8 @@ $(BLACKOUT_FILE): $(SNOW_PARQUET)
 
 # Make burst catalog
 # WANT THIS TO BE LIKE: opera-disp-s1-consistent-burst-ids-2024-10-11-2016-07-01_to_2024-09-04.json
-$(CONSISTENT_BURSTS): $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg
-	opera-db make-burst-catalog --blackout-file $(BLACKOUT_FILE) $^ > $@
+$(CONSISTENT_BURSTS): $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg $(BLACKOUT_FILE)
+	opera-db make-burst-catalog --blackout-file $(BLACKOUT_FILE)  $(CMR_SURVEY_CSV) opera-s1-disp-$(VERSION).gpkg > $@
 
 # Make reference dates
 $(REFERENCE_DATES): $(BLACKOUT_FILE)

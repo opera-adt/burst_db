@@ -117,11 +117,7 @@ def snow_months_to_blackout_json(
     }
 
     # Load the snow-analysis table
-    gdf = (
-        gpd.read_parquet(input_file)
-        if Path(input_file).suffix.lower() == ".parquet"
-        else gpd.read_file(input_file)
-    )
+    gdf = gpd.read_parquet(input_file)
 
     # Decide which window we want
     default, backup = "median", "aggressive"
