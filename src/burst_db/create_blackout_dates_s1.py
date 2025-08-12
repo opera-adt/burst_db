@@ -120,24 +120,8 @@ def snow_months_to_blackout_json(
 
     # Load the snow-analysis table
     gdf = gpd.read_parquet(input_file)
-
-    use_aggressive_mask = gdf.blackout_duration_median > max_default_duration
-    gdf["start_selected"] = np.where(
-        use_aggressive_mask,
-        gdf["start_aggressive"],
-        gdf["start_median"],
-    )
-    gdf["end_selected"] = np.where(
-        use_aggressive_mask,
-        gdf["end_aggressive"],
-        gdf["end_median"],
-    )
-    gdf["blackout_duration_selected"] = np.where(
-        use_aggressive_mask,
-        gdf["blackout_duration_aggressive"],
-        gdf["blackout_duration_median"],
-    )
-    gdf["mode_selected"] = np.where(use_aggressive_mask, "aggressive", "median")
+    if "start_selected" not in gdf.columns:
+        gdf = _select_blackout_dates(gdf, max_default_duration)
 
     # Span of calendar years to pre-compute
     years = range(2015, 2030)
@@ -161,6 +145,29 @@ def snow_months_to_blackout_json(
         "Blackout JSON created: %s (%d frames)", output_filename, len(blackout_dates)
     )
     return result
+
+
+def _select_blackout_dates(
+    gdf: gpd.GeoDataFrame, max_default_duration: float
+) -> gpd.GeoDataFrame:
+    use_aggressive_mask = gdf.blackout_duration_median > max_default_duration
+    gdf["start_selected"] = np.where(
+        use_aggressive_mask,
+        gdf["start_aggressive"],
+        gdf["start_median"],
+    )
+    gdf["end_selected"] = np.where(
+        use_aggressive_mask,
+        gdf["end_aggressive"],
+        gdf["end_median"],
+    )
+    gdf["blackout_duration_selected"] = np.where(
+        use_aggressive_mask,
+        gdf["blackout_duration_aggressive"],
+        gdf["blackout_duration_median"],
+    )
+    gdf["mode_selected"] = np.where(use_aggressive_mask, "aggressive", "median")
+    return gdf
 
 
 def gdf_to_blackout_json(input_file: Path | str) -> dict:

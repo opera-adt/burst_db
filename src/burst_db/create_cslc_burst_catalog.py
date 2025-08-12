@@ -17,6 +17,17 @@ from tqdm.contrib.concurrent import thread_map
 
 logger = logging.getLogger("burst_db")
 
+AUSTRALIAN_SAMPLE_FRAMES = (31577, 39355, 39360, 39362, 43655)
+EDGE_FRAMES_TO_IGNORE = (
+    28471,
+    4854,
+    12900,
+    22674,
+    40027,
+    36261,
+    42013,
+)
+
 
 def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
     """Create a burst catalog from the input CSV and OPERA database.
@@ -94,7 +105,6 @@ def fetch_bursts(db_file: Path | str):
         DataFrame containing the fetched bursts.
 
     """
-    australian_sample_frames = (31577, 39355, 39360, 39362, 43655)
     query = f"""
     SELECT
       frame_id,
@@ -103,8 +113,9 @@ def fetch_bursts(db_file: Path | str):
     FROM
       bursts_with_frame_ids
     WHERE
-      burst_is_north_america
-      OR frame_id in {australian_sample_frames}
+      (burst_is_north_america
+      OR frame_id in {AUSTRALIAN_SAMPLE_FRAMES})
+      AND frame_id not in {EDGE_FRAMES_TO_IGNORE}
     ORDER BY
       frame_id,
       burst_id_jpl,

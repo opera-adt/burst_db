@@ -1,5 +1,5 @@
 # Configuration
-VERSION := 0.11.0
+VERSION := 0.12.0
 SNOW_PARQUET := ../snow-analysis/opera-region4-snow-analysis.parquet
 DATE := $(shell date +%Y-%m-%d)
 # Verbosely echo commands
