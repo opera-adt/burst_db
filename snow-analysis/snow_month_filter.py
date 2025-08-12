@@ -191,9 +191,11 @@ def get_blackout_windows(
     gdf_priority: gpd.GeoDataFrame,
     snow_threshold: float = 3,
     freezing_threshold: float = -2,
+    temp_var: Literal["tmin", "tmax"] = "tmax",
     mask_fraction: float = 0.5,
     frame_id: int | None = None,
-) -> dict:
+    debug: bool = False,
+) -> pd.DataFrame:
     """Get blackout windows for frames based on weather conditions.
 
     Parameters
@@ -206,14 +208,18 @@ def get_blackout_windows(
         Snow threshold for bad conditions.
     freezing_threshold : float
         Temperature threshold for bad conditions.
+    temp_var : Literal["tmin", "tmax"]
+        Temperature variable to use.
     mask_fraction : float
         Fraction of pixels that must be bad to consider a day bad.
     frame_id : int | None
         Specific frame ID to process, or None for all frames.
+    debug : bool
+        Whether to print debug information.
 
     Returns
     -------
-    dict
+    pd.DataFrame
         DataFrame with blackout windows for each frame.
 
     """
@@ -221,6 +227,7 @@ def get_blackout_windows(
         agg,
         snow_threshold=snow_threshold,
         freezing_threshold=freezing_threshold,
+        temp_var=temp_var,
         combine="or",
     )
 
@@ -230,7 +237,8 @@ def get_blackout_windows(
     for frame_id in tqdm(frames, desc="Processing frames"):
         poly = gdf_priority.loc[gdf_priority.frame_id == frame_id, "geometry"].iloc[0]
         if _subset_mask_to_frame(mask, poly).size == 0:
-            print(f"No mask found for frame {frame_id}; skipping")
+            if debug:
+                print(f"No mask found for frame {frame_id}; skipping")
             continue
 
         frac = daily_bad_fraction(mask, poly)  # Series indexed by date
@@ -259,6 +267,7 @@ def get_blackout_windows(
                 "mask_fraction": mask_fraction,
                 "snow_threshold": snow_threshold,
                 "freezing_threshold": freezing_threshold,
+                "temp_var": temp_var,
                 "start_aggressive": start_aggressive,
                 "end_aggressive": end_aggressive,
                 "start_median": start_median,
@@ -267,7 +276,17 @@ def get_blackout_windows(
                 "end_conservative": end_conservative,
             }
         )
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    df["blackout_duration_aggressive"] = np.abs(
+        df["start_aggressive"] - df["end_aggressive"]
+    ).dt.days
+    df["blackout_duration_median"] = np.abs(
+        df["start_median"] - df["end_median"]
+    ).dt.days
+    df["blackout_duration_conservative"] = np.abs(
+        df["start_conservative"] - df["end_conservative"]
+    ).dt.days
+    return df
 
 
 def get_annual_seasons(
