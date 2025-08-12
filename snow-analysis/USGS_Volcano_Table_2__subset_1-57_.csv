@@ -1,0 +1,58 @@
+rank,volcano,state,aviation_threat_score,overall_threat_score,latitude,longitude
+1,Kīlauea,HI,48,263,19.425,-155.292
+2,Mount St. Helens,WA,59,235,46.2,-122.18
+3,Mount Rainier,WA,37,203,46.87,-121.758
+4,Redoubt Volcano,AK,48,201,60.485,-152.742
+5,Mount Shasta,CA,39,178,41.42,-122.2
+6,Mount Hood,OR,30,178,45.374,-121.694
+7,Three Sisters,OR,30,165,44.133,-121.767
+8,Akutan Island,AK,47,161,54.134,-165.986
+9,Makushin Volcano,AK,47,161,53.891,-166.923
+10,Mount Spurr,AK,48,160,61.299,-152.251
+11,Lassen volcanic center,CA,32,153,40.492,-121.508
+12,Augustine Volcano,AK,48,151,59.363,-153.43
+13,Newberry Volcano,OR,30,146,43.722,-121.229
+14,Mount Baker,WA,15,139,48.777,-121.813
+15,Glacier Peak,WA,37,135,48.112,-121.113
+16,Mauna Loa,HI,4,131,19.475,-155.608
+17,Crater Lake,OR,37,129,42.93,-122.12
+18,Long Valley Caldera,CA,29,129,37.7,-118.87
+19,Mount Okmok,AK,47,117,53.43,-168.13
+20,Iliamna Volcano,AK,34,115,60.032,-153.09
+21,Yellowstone caldera,WY,27,115,44.43,-110.67
+22,Aniakchak Crater,AK,41,112,56.88,-158.17
+23,Hualālai,HI,27,109,19.692,-155.87
+24,Mono-Inyo Craters,CA,29,106,37.88,-119.0
+25,Mount Martin,AK,23,106,58.172,-155.361
+26,Mount Mageik,AK,23,106,58.195,-155.253
+27,Trident Volcano,AK,29,106,58.236,-155.1
+28,Mount Katmai,AK,35,106,58.28,-154.963
+29,Mount Veniaminof,AK,47,102,56.17,-159.38
+30,Atka volcanic complex,AK,35,102,52.381,-174.154
+31,Korovin Volcano,AK,35,102,52.381,-174.166
+32,Shishaldin Volcano,AK,41,93,54.756,-163.97
+33,Clear Lake volcanic field,CA,15,92,38.97,-122.77
+34,Mount Adams,WA,15,92,46.206,-121.49
+35,Hayes Volcano,AK,34,90,61.64,-152.411
+36,Westdahl Peak,AK,47,89,54.518,-164.65
+37,Novarupta,AK,35,88,58.27,-155.157
+38,Mount Churchill,AK,29,82,61.38,-141.75
+39,Kanaga Volcano,AK,41,81,51.923,-177.168
+40,Ugashik-Peulik volcanic complex,AK,41,81,57.751,-156.368
+41,Pavlof Volcano,AK,35,81,55.42,-161.887
+42,Mount Griggs,AK,23,79,58.354,-155.092
+43,Kaguyak Crater,AK,29,79,58.608,-154.028
+44,Pagan Island,CNMI,28,79,18.13,145.8
+45,Medicine Lake,CA,19,78,41.58,-121.57
+46,Great Sitkin Volcano,AK,41,76,52.076,-176.13
+47,Kasatochi Island,AK,35,75,52.177,-175.508
+48,Mount Cleveland,AK,35,75,52.825,-169.944
+49,Mount Moffett,AK,17,73,51.944,-176.747
+50,Seguam Island,AK,47,73,52.315,-172.51
+51,Fisher Caldera,AK,35,71,54.65,-164.43
+52,Snowy Mountain,AK,12,71,58.336,-154.682
+53,Fourpeaked Mountain,AK,12,71,58.77,-153.672
+54,Mount Douglas,AK,12,71,58.855,-153.542
+55,Semisopochnoi Island,AK,41,70,51.93,179.58
+56,Salton Buttes,CA,14,68,33.2,-115.62
+57,Agrigan Island,CNMI,24,67,18.77,145.67
