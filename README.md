@@ -58,6 +58,39 @@ The program uses the database of Sentinel-1 bursts released by ESA. The data can
 
 A larger GeoPackage is created which contains the burst footprint geometries, which can be viewed/queried with GIS program.
 
+## Creating a new release
+
+After making changes to the code, a new release can be created by running the following commands:
+
+```bash
+# For example, if the new version is 0.12.0
+git tag  v0.12.0
+pip install -e .
+
+# Setup in a new folder
+mkdir -p test_012 && cd test_012
+# Copy last one, OR move new .tar.gz from the CMR survey if updating with new CSLCs
+cp ../test_011/*tar.gz .
+make -f ../Makefile
+```
+
+The result will be a folder with the following files:
+
+```bash
+
+```
+$ ls test_012
+burst_map_IW_000001_375887.sqlite3                                          opera-disp-s1-blackout-dates-2025-08-12.json
+burst-id-geometries-simple-0.12.0.geojson                                   opera-disp-s1-consistent-burst-ids-2025-08-12-2016-07-01_to_2024-12-31.json
+burst-id-geometries-simple-0.12.0.geojson.zip                               opera-disp-s1-consistent-burst-ids-no-blackout.json
+cmr_survey_2016-07-01_to_2024-12-31.csv                                     opera-disp-s1-reference-dates-2025-08-12.json
+cmr_survey.2016-07-01_to_2024-12-31.2025-06-12.opera-pcm-3.1.6.csv.tar.gz   opera-s1-disp-0.12.0-2d.gpkg
+cslc-burst-database-2025-08-12.duckdb                                       opera-s1-disp-0.12.0-burst-to-frame.json.zip
+frame-geometries-simple-0.12.0.geojson                                      opera-s1-disp-0.12.0-frame-to-burst.json.zip
+frame-geometries-simple-0.12.0.geojson.zip                                  opera-s1-disp-0.12.0.gpkg
+GSHHS_shp                                                                   usgs_land_0.3deg_buffered.geojson.zip
+opera-burst-bbox-only.sqlite3
+```
 
 ### Frame database information
 

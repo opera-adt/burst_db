@@ -47,9 +47,9 @@ def _rich_summary_table(df: pd.DataFrame, title: str) -> None:
         df.groupby("priority")
         .agg(
             frames=("frame_id", "count"),
-            kept=("sensing_time_count_drop", "sum"),
+            kept=("sensing_time_count_selected", "sum"),
             lost=("acqs_lost", "sum"),
-            ministacks=("ministack_count_drop", "sum"),
+            ministacks=("ministack_count_selected", "sum"),
         )
         .assign(pct_lost=lambda x: 100 * x.lost / (x.kept + x.lost))
         .sort_index()
@@ -70,20 +70,22 @@ if __name__ == "__main__":
     import sys
 
     path = Path(sys.argv[1])
-    file = next(path.glob("*consistent-burst-ids-2025*.json"))
-    no_drop_file = next(path.glob("*consistent*no-blackout*.json"))
+    file_with_drops = next(path.glob("*consistent-burst-ids-2025*.json"))
+    all_file = next(path.glob("*consistent*no-blackout*.json"))
 
-    df_all = _load_consistent_json(file).rename(
+    df_selected = _load_consistent_json(file_with_drops).rename(
+        columns=lambda c: f"{c}_selected" if c != "frame_id" else c
+    )
+    df_all = _load_consistent_json(all_file).rename(
         columns=lambda c: f"{c}_all" if c != "frame_id" else c
     )
-    df_drop = _load_consistent_json(no_drop_file).rename(
-        columns=lambda c: f"{c}_drop" if c != "frame_id" else c
-    )
 
-    df_cmp = df_all.merge(df_drop, on="frame_id", how="inner")
+    df_cmp = df_all.merge(df_selected, on="frame_id", how="inner")
 
     # lost acquisitions per frame
-    df_cmp["acqs_lost"] = df_cmp.sensing_time_count_all - df_cmp.sensing_time_count_drop
+    df_cmp["acqs_lost"] = (
+        df_cmp.sensing_time_count_all - df_cmp.sensing_time_count_selected
+    )
     df_cmp["pct_lost"] = 100 * df_cmp.acqs_lost / df_cmp.sensing_time_count_all
 
     # add priority & Region-3b flags
@@ -102,10 +104,10 @@ if __name__ == "__main__":
 
     # Histogram of sensing-time counts *after filtering*
     plt.figure(figsize=(10, 5))
-    bins = np.arange(0, df_cmp.sensing_time_count_drop.max() + 12, 12)
+    bins = np.arange(0, df_cmp.sensing_time_count_selected.max() + 12, 12)
     sns.histplot(
         data=df_cmp,
-        x="sensing_time_count_drop",
+        x="sensing_time_count_selected",
         hue="priority",
         bins=bins,
         multiple="stack",
@@ -133,9 +135,9 @@ if __name__ == "__main__":
     # Scatter: original vs filtered acquisitions
     plt.figure(figsize=(6, 6))
     sns.scatterplot(
-        data=df_cmp[df_cmp.sensing_time_count_drop >= 15],
+        data=df_cmp[df_cmp.sensing_time_count_selected >= 15],
         x="sensing_time_count_all",
-        y="sensing_time_count_drop",
+        y="sensing_time_count_selected",
         hue="priority",
         alpha=0.6,
         edgecolor="none",
