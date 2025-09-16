@@ -1,5 +1,11 @@
 # Configuration
-VERSION := 0.12.0
+# VERSION can be passed in: make VERSION=0.13.0
+# Or defaults to reading from git tag
+VERSION ?= $(shell git describe --tags --abbrev=0 | sed 's/^v//')
+ifeq ($(VERSION),)
+    $(error No VERSION specified and no git tags found. Use: make VERSION=0.13.0)
+endif
+
 SNOW_PARQUET := ../snow-analysis/opera-region4-snow-analysis.parquet
 DATE := $(shell date +%Y-%m-%d)
 # Verbosely echo commands
@@ -22,6 +28,9 @@ REFERENCE_DATES := opera-disp-s1-reference-dates-$(DATE).json
 
 # Main target
 all: opera-s1-disp-$(VERSION).gpkg $(CONSISTENT_BURSTS) $(REFERENCE_DATES)
+	@echo "================================================"
+	@echo "Build complete for version $(VERSION)"
+	@echo "================================================"
 
 # Create Opera DB
 opera-s1-disp-$(VERSION).gpkg:
@@ -55,4 +64,8 @@ clean:
 cleanall: clean
 	rm -f opera-s1-disp-$(VERSION).gpkg opera-disp-s1-consistent-bursts-*.json
 
-.PHONY: all clean cleanall
+# Show current version
+show-version:
+	@echo "Current version: $(VERSION)"
+
+.PHONY: all clean cleanall show-version
