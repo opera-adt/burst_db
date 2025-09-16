@@ -18,15 +18,31 @@ from tqdm.contrib.concurrent import thread_map
 logger = logging.getLogger("burst_db")
 
 AUSTRALIAN_SAMPLE_FRAMES = (31577, 39355, 39360, 39362, 43655)
-EDGE_FRAMES_TO_IGNORE = (
-    28471,
+EDGE_FRAMES_TO_IGNORE = [
+    1652,
+    3581,
     4854,
+    9439,
+    19696,
     12900,
+    22396,
     22674,
-    40027,
+    23449,
+    26945,
+    27212,
+    28471,
+    30716,
+    34997,
+    35023,
     36261,
+    40027,
+    40851,
     42013,
-)
+    42781,
+    43041,
+    44884,
+    46294,
+]
 
 
 def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
