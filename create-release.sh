@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script to automate the creation of a new release
-# Usage: ./create-release.sh v0.13.0
+# Usage: ./create-release.sh v0.13.0 [--cmr-survey path/to/survey.tar.gz]
 
 set -e  # Exit on error
 
@@ -11,14 +11,59 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# Function to show usage
+show_usage() {
+    echo "Usage: $0 <version> [--cmr-survey <path>]"
+    echo ""
+    echo "Arguments:"
+    echo "  version              Version number (e.g., v0.13.0 or 0.13.0)"
+    echo ""
+    echo "Options:"
+    echo "  --cmr-survey <path>  Path to CMR survey tar.gz file"
+    echo ""
+    echo "Examples:"
+    echo "  $0 v0.13.0"
+    echo "  $0 v0.13.0 --cmr-survey /path/to/cmr_survey.2016-07-01_to_2024-12-31.csv.tar.gz"
+    echo "  $0 0.13.0 --cmr-survey ../new_survey.tar.gz"
+}
+
 # Check if version argument is provided
 if [ $# -eq 0 ]; then
-    echo "Usage: $0 <version>"
-    echo "Example: $0 v0.13.0"
+    show_usage
     exit 1
 fi
 
 VERSION_TAG=$1
+CMR_SURVEY_PATH=""
+
+# Parse optional arguments
+shift  # Remove version argument
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --cmr-survey)
+            if [ -z "$2" ]; then
+                echo -e "${RED}Error: --cmr-survey requires a file path${NC}"
+                exit 1
+            fi
+            CMR_SURVEY_PATH="$2"
+            if [ ! -f "$CMR_SURVEY_PATH" ]; then
+                echo -e "${RED}Error: CMR survey file not found: $CMR_SURVEY_PATH${NC}"
+                exit 1
+            fi
+            shift 2
+            ;;
+        --help|-h)
+            show_usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            show_usage
+            exit 1
+            ;;
+    esac
+done
+
 # Strip 'v' prefix if present to get just the number
 VERSION_NUM=${VERSION_TAG#v}
 
@@ -28,6 +73,9 @@ if [[ ! $VERSION_TAG == v* ]]; then
 fi
 
 echo -e "${GREEN}Creating release for version: ${VERSION_TAG} (${VERSION_NUM})${NC}"
+if [ -n "$CMR_SURVEY_PATH" ]; then
+    echo -e "Using custom CMR survey: $(basename $CMR_SURVEY_PATH)"
+fi
 echo "========================================="
 
 # Step 1: Create git tag
@@ -65,24 +113,33 @@ mkdir -p ${TEST_DIR}
 cd ${TEST_DIR}
 echo -e "${GREEN}✓ Test directory created${NC}"
 
-# Step 4: Look for CMR survey from previous release
-# Try to find the most recent test directory
-PREV_TEST_DIR=$(ls -dt ../test_* 2>/dev/null | grep -v "${TEST_DIR}" | head -n1)
-
-if [ -n "${PREV_TEST_DIR}" ] && [ -d "${PREV_TEST_DIR}" ]; then
-    echo "Looking for CMR survey in: ${PREV_TEST_DIR}..."
-    CMR_SURVEY=$(ls -t ${PREV_TEST_DIR}/cmr_survey*.csv.tar.gz 2>/dev/null | head -n1)
-    if [ -n "$CMR_SURVEY" ]; then
-        echo "Copying CMR survey from previous release..."
-        cp "$CMR_SURVEY" .
-        echo -e "${GREEN}✓ CMR survey copied${NC}"
-    else
-        echo -e "${YELLOW}⚠ No CMR survey found in ${PREV_TEST_DIR}${NC}"
-        echo "You may need to obtain a new survey from SDS"
-    fi
+# Step 4: Handle CMR survey
+if [ -n "$CMR_SURVEY_PATH" ]; then
+    # Use the provided CMR survey file
+    echo "Using provided CMR survey: $(basename $CMR_SURVEY_PATH)"
+    cp "$CMR_SURVEY_PATH" .
+    echo -e "${GREEN}✓ CMR survey copied${NC}"
 else
-    echo -e "${YELLOW}⚠ No previous test directory found${NC}"
-    echo "You'll need to obtain the CMR survey from SDS"
+    # Look for CMR survey from previous release
+    PREV_TEST_DIR=$(ls -dt ../test_* 2>/dev/null | grep -v "${TEST_DIR}" | head -n1)
+
+    if [ -n "${PREV_TEST_DIR}" ] && [ -d "${PREV_TEST_DIR}" ]; then
+        echo "Looking for CMR survey in: ${PREV_TEST_DIR}..."
+        CMR_SURVEY=$(ls -t ${PREV_TEST_DIR}/cmr_survey*.csv.tar.gz 2>/dev/null | head -n1)
+        if [ -n "$CMR_SURVEY" ]; then
+            echo "Copying CMR survey from previous release..."
+            cp "$CMR_SURVEY" .
+            echo -e "${GREEN}✓ CMR survey copied${NC}"
+        else
+            echo -e "${YELLOW}⚠ No CMR survey found in ${PREV_TEST_DIR}${NC}"
+            echo "You may need to obtain a new survey from SDS"
+            echo "Tip: Use --cmr-survey option to specify a survey file"
+        fi
+    else
+        echo -e "${YELLOW}⚠ No previous test directory found${NC}"
+        echo "You'll need to obtain the CMR survey from SDS"
+        echo "Tip: Use --cmr-survey option to specify a survey file"
+    fi
 fi
 
 # Step 5: Run make with VERSION parameter
@@ -96,6 +153,9 @@ echo -e "${GREEN}✓ Release ${VERSION_TAG} created successfully!${NC}"
 echo "========================================="
 echo ""
 echo "Test directory: ${PWD}"
+if [ -n "$CMR_SURVEY_PATH" ]; then
+    echo "CMR survey: $(basename $CMR_SURVEY_PATH) (custom)"
+fi
 echo ""
 echo "Next steps:"
 echo "  1. Verify the generated files"
