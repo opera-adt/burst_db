@@ -64,21 +64,20 @@ After making changes to the code, a new release can be created by running the fo
 
 ```bash
 # For example, if the new version is 0.12.0
-git tag  v0.12.0
+git tag v0.12.0
 pip install -e .
 
 # Setup in a new folder
 mkdir -p test_012 && cd test_012
-# Copy last one, OR move new .tar.gz from the CMR survey if updating with new CSLCs
-cp ../test_011/*tar.gz .
+# Copy last CMR survey of CSLC products
+cp ../test_011/cmr_survey.2016-07-01_to_2024-12-31.2025-06-12.opera-pcm-3.1.6.csv.tar.gz .
+# OR: if updating, get the new survey from SDS
 make -f ../Makefile
 ```
 
 The result will be a folder with the following files:
 
 ```bash
-
-```
 $ ls test_012
 burst_map_IW_000001_375887.sqlite3                                          opera-disp-s1-blackout-dates-2025-08-12.json
 burst-id-geometries-simple-0.12.0.geojson                                   opera-disp-s1-consistent-burst-ids-2025-08-12-2016-07-01_to_2024-12-31.json
