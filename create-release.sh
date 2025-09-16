@@ -63,6 +63,7 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+CMR_SURVEY_PATH=$(realpath $CMR_SURVEY_PATH)
 
 # Strip 'v' prefix if present to get just the number
 VERSION_NUM=${VERSION_TAG#v}
@@ -116,7 +117,7 @@ echo -e "${GREEN}✓ Test directory created${NC}"
 # Step 4: Handle CMR survey
 if [ -n "$CMR_SURVEY_PATH" ]; then
     # Use the provided CMR survey file
-    echo "Using provided CMR survey: $(basename $CMR_SURVEY_PATH)"
+    echo "Using provided CMR survey: $(realpath $CMR_SURVEY_PATH)"
     cp "$CMR_SURVEY_PATH" .
     echo -e "${GREEN}✓ CMR survey copied${NC}"
 else
