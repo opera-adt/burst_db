@@ -64,8 +64,7 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
         # the csv has an odd header with a #
         # the "revision time" is sort of like "PGE Processing time"
         # The "Temporal Time" is the acquisition sensing time in the S1 filename
-        conn.sql(
-            f"""
+        conn.sql(f"""
     CREATE TABLE bursts AS
     SELECT
         LOWER(REPLACE(substring("# Granule ID", 18, 15), '-', '_')) AS burst_id_jpl,
@@ -80,8 +79,7 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
         1, 2
     ORDER BY
         1, 2
-    """
-        )
+    """)
 
         conn.sql(f"ATTACH '{opera_db}' AS opera")
 
@@ -89,8 +87,7 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
             "Joining to OPERA Frame/Burst database Creating table from CMR raw"
             " bursts..."
         )
-        conn.sql(
-            """
+        conn.sql("""
     CREATE TABLE bursts_with_frame_ids AS
     SELECT
         b.burst_id_jpl,
@@ -103,8 +100,7 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
     JOIN opera.frames_bursts fb ON fb.burst_ogc_fid = bm.OGC_FID
     JOIN opera.frames f ON fb.frame_fid = f.fid
     WHERE pol = 'VV'
-    """
-        )
+    """)
 
 
 def fetch_bursts(db_file: Path | str):
