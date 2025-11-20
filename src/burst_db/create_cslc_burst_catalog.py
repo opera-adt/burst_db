@@ -67,10 +67,10 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
         conn.sql(f"""
     CREATE TABLE bursts AS
     SELECT
-        LOWER(REPLACE(substring("# Granule ID", 18, 15), '-', '_')) AS burst_id_jpl,
+        LOWER(REPLACE(substring("Granule ID", 18, 15), '-', '_')) AS burst_id_jpl,
         "Temporal Time"::TIMESTAMP AS sensing_time,
         MAX("Revision Time"::TIMESTAMP) AS max_revision_time,
-        FIRST("# Granule ID") AS granule_id,
+        FIRST("Granule ID") AS granule_id,
         granule_id[72:73] AS pol,
         FIRST("Revision-Temporal Delta Hours") AS delta_hours,
         FIRST("revision-id") AS revision_id
@@ -117,6 +117,10 @@ def fetch_bursts(db_file: Path | str):
         DataFrame containing the fetched bursts.
 
     """
+    # Convert Python lists to SQL tuple strings
+    australian_frames = str(tuple(AUSTRALIAN_SAMPLE_FRAMES))
+    edge_frames = str(tuple(EDGE_FRAMES_TO_IGNORE))    
+
     query = f"""
     SELECT
       frame_id,
@@ -126,8 +130,8 @@ def fetch_bursts(db_file: Path | str):
       bursts_with_frame_ids
     WHERE
       (burst_is_north_america
-      OR frame_id in {AUSTRALIAN_SAMPLE_FRAMES})
-      AND frame_id not in {EDGE_FRAMES_TO_IGNORE}
+      OR frame_id in {australian_frames})
+      AND frame_id not in {edge_frames}
     ORDER BY
       frame_id,
       burst_id_jpl,
