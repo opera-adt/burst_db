@@ -119,7 +119,7 @@ def fetch_bursts(db_file: Path | str):
     """
     # Convert Python lists to SQL tuple strings
     australian_frames = str(tuple(AUSTRALIAN_SAMPLE_FRAMES))
-    edge_frames = str(tuple(EDGE_FRAMES_TO_IGNORE))    
+    edge_frames = str(tuple(EDGE_FRAMES_TO_IGNORE))
 
     query = f"""
     SELECT
