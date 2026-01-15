@@ -68,8 +68,8 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
     CREATE TABLE bursts AS
     SELECT
         LOWER(REPLACE(substring("Granule ID", 18, 15), '-', '_')) AS burst_id_jpl,
-        "Temporal Time"::TIMESTAMP AS sensing_time,
-        MAX("Revision Time"::TIMESTAMP) AS max_revision_time,
+        "Temporal Time"::TIMESTAMPTZ AS sensing_time,
+        MAX("Revision Time"::TIMESTAMPTZ) AS max_revision_time,
         FIRST("Granule ID") AS granule_id,
         granule_id[72:73] AS pol,
         FIRST("Revision-Temporal Delta Hours") AS delta_hours,
@@ -139,6 +139,12 @@ def fetch_bursts(db_file: Path | str):
     """
     with duckdb.connect(str(db_file)) as conn:
         df_out = conn.sql(query).df()
+
+    # Convert to UTC and remove timezone info (keep as naive UTC)
+    if df_out["sensing_time"].dt.tz is not None:
+        df_out["sensing_time"] = (
+            df_out["sensing_time"].dt.tz_convert("UTC").dt.tz_localize(None)
+        )
 
     df_out["sensing_date"] = df_out["sensing_time"].dt.date
     return df_out
