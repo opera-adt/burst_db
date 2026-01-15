@@ -140,9 +140,11 @@ def fetch_bursts(db_file: Path | str):
     with duckdb.connect(str(db_file)) as conn:
         df_out = conn.sql(query).df()
 
-    # Convert to UTC and remove timezone info (keep as naive UTC) 
+    # Convert to UTC and remove timezone info (keep as naive UTC)
     if df_out["sensing_time"].dt.tz is not None:
-        df_out["sensing_time"] = df_out["sensing_time"].dt.tz_convert("UTC").dt.tz_localize(None)
+        df_out["sensing_time"] = (
+            df_out["sensing_time"].dt.tz_convert("UTC").dt.tz_localize(None)
+        )
 
     df_out["sensing_date"] = df_out["sensing_time"].dt.date
     return df_out
