@@ -218,3 +218,79 @@ This indicates to the processing system that we should start outputting data wit
 ```bash
 opera-db make-reference-dates
 ```
+
+## Reconciling and Labeling Burst Databases
+
+The `reconcile_and_label_db.py` script is a standalone tool for reconciling differences between two burst database JSON files and adding processing mode labels to sensing times.
+
+### Features
+
+1. **Database Reconciliation**: Compares old and new consistent burst database JSON files and reconciles differences:
+   - If the new database has more burst IDs than the old for a frame, it uses the old burst IDs
+   - If the new database is missing sensing times from the old, it adds them back
+   - If there's no overlap in sensing times (indicating a complete restart after a gap), the new data is kept as-is
+
+2. **Processing Mode Labeling**: Assigns processing mode labels to each sensing time:
+   - `historical_XX`: Full batches of 15 sensing times (ready for historical processing)
+   - `forward_XX`: Partial batches with fewer than 15 sensing times (for forward processing)
+   - `no_run`: Groups with fewer than 15 total sensing times (insufficient data)
+   - The `_XX` suffix (e.g., `_01`, `_02`) indicates the group number, which increments after temporal gaps of 2+ years
+
+### Usage
+
+```bash
+# Reconcile two databases and add processing mode labels
+python src/burst_db/reconcile_and_label_db.py \
+    --old-db old_consistent_burst_ids.json \
+    --new-db new_consistent_burst_ids.json \
+    --output labeled_output.json
+
+# Only add processing mode labels (skip reconciliation)
+python src/burst_db/reconcile_and_label_db.py \
+    --new-db input.json \
+    --output output.json \
+    --no-reconcile
+
+# Customize batch size and gap threshold
+python src/burst_db/reconcile_and_label_db.py \
+    --old-db old.json \
+    --new-db new.json \
+    --output output.json \
+    --batch-size 20 \
+    --gap-threshold 1.5 \
+    --verbose
+```
+
+### Command Line Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--old-db` | Path to the old burst database JSON file | Required (unless `--no-reconcile`) |
+| `--new-db` | Path to the new burst database JSON file | Required |
+| `--output` | Path for the output JSON file | Required |
+| `--no-reconcile` | Skip reconciliation, only add labels | False |
+| `--batch-size` | Number of sensing times per batch | 15 |
+| `--gap-threshold` | Gap threshold in years to restart batching | 2.0 |
+| `--verbose` | Print detailed frame information | False |
+
+### Output Format
+
+The output JSON replaces the `sensing_time_list` array with a dictionary mapping sensing times to their labels:
+
+```json
+{
+  "metadata": { ... },
+  "data": {
+    "831": {
+      "burst_id_list": ["t004_006645_iw1", "t004_006646_iw1", ...],
+      "sensing_time_list": {
+        "2016-07-02T23:05:35": "historical_01",
+        "2016-09-24T23:05:39": "historical_01",
+        ...
+        "2025-10-19T23:06:08": "forward_01"
+      }
+    },
+    ...
+  }
+}
+```
