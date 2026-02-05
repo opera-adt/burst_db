@@ -526,6 +526,10 @@ Examples:
     python reconcile_and_label_db.py --old-db old.json --new-db new.json \\
            --output output.json
 
+    # Reconcile and also update the input (new) database with corrections
+    python reconcile_and_label_db.py --old-db old.json --new-db new.json \\
+           --output output.json --update-input
+
     # Only add processing modes to a single database (no reconciliation)
     python reconcile_and_label_db.py --new-db input.json --output output.json \\
            --no-reconcile
@@ -578,6 +582,13 @@ Examples:
         action="store_true",
         help="Print detailed information during processing.",
     )
+    parser.add_argument(
+        "--update-input",
+        action="store_true",
+        help="Update the input (new) database file with reconciled burst IDs and "
+        "sensing times. This saves the corrections back to the original file "
+        "before processing mode labels are added.",
+    )
 
     args = parser.parse_args()
 
@@ -608,6 +619,29 @@ Examples:
         print("Task 1: Reconciling databases")
         print("-" * 60)
         working_db = reconcile_databases(old_db, new_db)
+
+        # Update the input file if requested
+        if args.update_input:
+            print("\n" + "-" * 60)
+            print("Updating input database with reconciled data")
+            print("-" * 60)
+            # Create updated version preserving original metadata, only updating data
+            updated_input = {}
+            if "metadata" in new_db:
+                updated_input["metadata"] = new_db["metadata"]
+            updated_input["data"] = {}
+            working_data = get_data_section(working_db)
+            for frame_id, frame_data in working_data.items():
+                # Convert sensing_time_list back to a list if it's a dict
+                sensing_times = frame_data.get("sensing_time_list", [])
+                if isinstance(sensing_times, dict):
+                    sensing_times = list(sensing_times.keys())
+                updated_input["data"][frame_id] = {
+                    "burst_id_list": frame_data.get("burst_id_list", []),
+                    "sensing_time_list": sensing_times,
+                }
+            save_database(updated_input, args.new_db)
+            print(f"  Updated input database: {args.new_db}")
 
     print("\n" + "-" * 60)
     print("Task 2: Adding processing mode labels")
