@@ -172,7 +172,7 @@ def reconcile_frame(
     old_times = old_frame.get("sensing_time_list", [])
     new_times = new_frame.get("sensing_time_list", [])
 
-    old_times_set = set(old_times)
+    set(old_times)
     new_times_set = set(new_times)
 
     # For overlap and missing time checks, compare only dates (ignore hours)
