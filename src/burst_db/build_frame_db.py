@@ -696,7 +696,7 @@ def create(
 
     # Mark the ones in north america in the OPERA region of interest
     is_in_north_america = get_intersect_indicator(df_frames, geom_north_america)
-    df_frames.loc[:, "is_north_america"] = is_in_north_america
+    df_frames.loc[:, "is_north_america"] = is_in_north_america.astype(int)
 
     logger.info("Final number of frames: %s", len(df_frames))
     logger.info("Number intersecting land: %s", is_in_land.sum())
