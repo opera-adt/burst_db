@@ -74,6 +74,23 @@ def parse_sensing_time(time_str: str) -> datetime:
     return datetime.fromisoformat(time_str)
 
 
+def get_date_only(time_str: str) -> str:
+    """Extract the date portion from a sensing time string.
+
+    Parameters
+    ----------
+    time_str : str
+        Time string in format YYYY-MM-DDTHH:MM:SS.
+
+    Returns
+    -------
+    str
+        Date string in format YYYY-MM-DD.
+
+    """
+    return time_str.split("T")[0]
+
+
 def format_sensing_time(dt: datetime) -> str:
     """Format a datetime to ISO 8601 sensing time string.
 
@@ -158,12 +175,16 @@ def reconcile_frame(
     old_times_set = set(old_times)
     new_times_set = set(new_times)
 
-    # Check if there's any overlap in sensing times
-    times_overlap = old_times_set & new_times_set
+    # For overlap and missing time checks, compare only dates (ignore hours)
+    old_dates_set = {get_date_only(t) for t in old_times}
+    new_dates_set = {get_date_only(t) for t in new_times}
+
+    # Check if there's any overlap in sensing times (by date only)
+    dates_overlap = old_dates_set & new_dates_set
 
     # If new has more burst IDs AND no overlap in sensing times,
     # this is a complete restart after a gap - keep new data as-is
-    if len(new_bursts) > len(old_bursts) and not times_overlap:
+    if len(new_bursts) > len(old_bursts) and not dates_overlap:
         return new_frame.copy(), True
 
     reconciled = {}
@@ -175,8 +196,9 @@ def reconcile_frame(
         reconciled["burst_id_list"] = new_bursts.copy()
 
     # Handle sensing times: start with new, add missing from old
-    # Find sensing times in old but missing in new
-    missing_times = old_times_set - new_times_set
+    # Find sensing times in old where the DATE is not present in new
+    # (if the date matches but hours differ, we don't consider it missing)
+    missing_times = {t for t in old_times if get_date_only(t) not in new_dates_set}
 
     # Combine and sort all sensing times
     all_times = list(new_times_set | missing_times)
