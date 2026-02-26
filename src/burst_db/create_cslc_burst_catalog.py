@@ -60,6 +60,9 @@ def create_burst_catalog(input_csv: Path, opera_db: Path, output_file: Path):
     """
     logging.info("Creating table from CMR raw bursts...")
     with duckdb.connect(str(output_file)) as conn:
+        # Ensure bare timestamp strings from CSV are interpreted as UTC,
+        # not the machine's local timezone.
+        conn.sql("SET TimeZone = 'UTC'")
         # Note: we need to add the `FIRST` because CMR has duplicates.
         # the csv has an odd header with a #
         # the "revision time" is sort of like "PGE Processing time"
@@ -138,6 +141,7 @@ def fetch_bursts(db_file: Path | str):
       sensing_time
     """
     with duckdb.connect(str(db_file)) as conn:
+        conn.sql("SET TimeZone = 'UTC'")
         df_out = conn.sql(query).df()
 
     # Convert to UTC and remove timezone info (keep as naive UTC)
