@@ -8,6 +8,9 @@ endif
 
 SNOW_PARQUET := ../snow-analysis/opera-region4-snow-analysis.parquet
 DATE := $(shell date +%Y-%m-%d)
+# Global blackout period to add to all frames
+GLOBAL_BLACKOUT_START := 2025-04-29T19:40:10
+GLOBAL_BLACKOUT_END := 2025-05-01T19:33:34
 # Verbosely echo commands
 SHELL = sh -xv
 
@@ -40,9 +43,15 @@ opera-s1-disp-$(VERSION).gpkg:
 $(CMR_SURVEY_CSV): $(CMR_SURVEY_TAR)
 	tar -xzf $< -O > $@
 
+# Create blackout dates from snow analysis, then add global blackout period
 BLACKOUT_FILE := opera-disp-s1-blackout-dates-$(DATE).json
 $(BLACKOUT_FILE): $(SNOW_PARQUET)
 	opera-db create-blackout $(SNOW_PARQUET)
+	opera-db add-global-blackout $@ \
+		--start-date "$(GLOBAL_BLACKOUT_START)" \
+		--end-date "$(GLOBAL_BLACKOUT_END)" \
+		--output-file $@.tmp
+	mv $@.tmp $@
 
 # Make burst catalog
 # E.g.: opera-disp-s1-consistent-burst-ids-2024-10-11-2016-07-01_to_2024-09-04.json
@@ -62,10 +71,27 @@ clean:
 
 # Clean all generated files
 cleanall: clean
-	rm -f opera-s1-disp-$(VERSION).gpkg opera-disp-s1-consistent-bursts-*.json
+	rm -f opera-s1-disp-$(VERSION).gpkg opera-disp-s1-consistent-bursts-*.json \
+		opera-disp-s1-blackout-dates-*.json *.duckdb
 
 # Show current version
 show-version:
 	@echo "Current version: $(VERSION)"
 
-.PHONY: all clean cleanall show-version
+# Show current configuration
+show-config:
+	@echo "================================================"
+	@echo "Build Configuration"
+	@echo "================================================"
+	@echo "VERSION: $(VERSION)"
+	@echo "DATE: $(DATE)"
+	@echo "CMR_SURVEY_CSV: $(CMR_SURVEY_CSV)"
+	@echo "DATE_RANGE: $(DATE_RANGE)"
+	@echo "GLOBAL_BLACKOUT_START: $(GLOBAL_BLACKOUT_START)"
+	@echo "GLOBAL_BLACKOUT_END: $(GLOBAL_BLACKOUT_END)"
+	@echo "BLACKOUT_FILE: $(BLACKOUT_FILE)"
+	@echo "CONSISTENT_BURSTS: $(CONSISTENT_BURSTS)"
+	@echo "REFERENCE_DATES: $(REFERENCE_DATES)"
+	@echo "================================================"
+
+.PHONY: all clean cleanall show-version show-config

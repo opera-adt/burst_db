@@ -286,6 +286,87 @@ def gdf_to_blackout_json(input_file: Path | str) -> dict:
     return result
 
 
+def add_global_blackout_period(
+    blackout_file: Path | str,
+    start_date: str,
+    end_date: str,
+    output_file: Path | str | None = None,
+) -> dict:
+    """Add a global blackout period to all frames in an existing blackout JSON.
+
+    This function reads an existing blackout dates JSON file, adds the specified
+    time range to ALL frames, and saves the updated result.
+
+    Parameters
+    ----------
+    blackout_file : Path | str
+        Path to the existing blackout dates JSON file.
+    start_date : str
+        Start of the blackout period in ISO format (e.g., "2025-04-29T19:40:10").
+    end_date : str
+        End of the blackout period in ISO format (e.g., "2025-05-01T19:33:34").
+    output_file : Path | str | None, optional
+        Path to save the updated JSON. If None, generates a filename with current date.
+
+    Returns
+    -------
+    dict
+        The updated blackout dates dictionary.
+
+    Examples
+    --------
+    >>> result = add_global_blackout_period(
+    ...     "opera-disp-s1-blackout-dates-2025-08-06.json",
+    ...     "2025-04-29T19:40:10",
+    ...     "2025-05-01T19:33:34"
+    ... )
+    """
+    # Load existing blackout dates
+    with open(blackout_file) as f:
+        data = json.load(f)
+
+    # Validate date format
+    try:
+        datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+        datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+    except ValueError as e:
+        raise ValueError(f"Invalid date format: {e}") from e
+
+    # Add the new period to all frames
+    new_period = [start_date, end_date]
+    for frame_id in data["blackout_dates"]:
+        data["blackout_dates"][frame_id].append(new_period)
+        # Sort periods by start date
+        data["blackout_dates"][frame_id].sort(key=lambda x: x[0])
+
+    # Update metadata
+    data["metadata"]["generation_time"] = datetime.now().isoformat()
+    data["metadata"]["global_blackout_added"] = {
+        "start": start_date,
+        "end": end_date,
+        "added_at": datetime.now().isoformat(),
+    }
+
+    # Generate output filename if not provided
+    if output_file is None:
+        generation_time = datetime.now().strftime("%Y-%m-%d")
+        output_file = f"opera-disp-s1-blackout-dates-{generation_time}.json"
+
+    # Save updated JSON
+    with open(output_file, "w") as f:
+        json.dump(data, f, indent=2)
+
+    logger.info(
+        "Added global blackout period %s to %s to all %d frames. Saved to %s",
+        start_date,
+        end_date,
+        len(data["blackout_dates"]),
+        output_file,
+    )
+
+    return data
+
+
 @click.command()
 @click.argument("input_file")
 @click.option("--max-default-duration", default=240.0)
@@ -297,6 +378,38 @@ def create_blackout(
     return snow_months_to_blackout_json(
         input_file=input_file,
         max_default_duration=max_default_duration,
+    )
+
+
+@click.command()
+@click.argument("blackout_file")
+@click.option(
+    "--start-date",
+    required=True,
+    help="Start of blackout period (ISO format: YYYY-MM-DDTHH:MM:SS)",
+)
+@click.option(
+    "--end-date",
+    required=True,
+    help="End of blackout period (ISO format: YYYY-MM-DDTHH:MM:SS)",
+)
+@click.option(
+    "--output-file",
+    default=None,
+    help="Output filename (default: auto-generated with current date)",
+)
+def add_global_blackout(
+    blackout_file: Path | str,
+    start_date: str,
+    end_date: str,
+    output_file: Path | str | None = None,
+):
+    """Add a global blackout period to all frames in an existing blackout JSON."""
+    return add_global_blackout_period(
+        blackout_file=blackout_file,
+        start_date=start_date,
+        end_date=end_date,
+        output_file=output_file,
     )
 
 
