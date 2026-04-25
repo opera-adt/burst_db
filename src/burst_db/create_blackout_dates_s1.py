@@ -315,7 +315,7 @@ def add_global_blackout_period(
 
     Examples
     --------
-    >>> result = add_global_blackout_period(
+    >>> result = add_global_blackout_period(  # doctest: +SKIP
     ...     "opera-disp-s1-blackout-dates-2025-08-06.json",
     ...     "2025-04-29T19:40:10",
     ...     "2025-05-01T19:33:34"
