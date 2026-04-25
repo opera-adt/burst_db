@@ -214,6 +214,7 @@ def _timestamp_is_excluded(
     -------
     bool
         True if timestamp falls within a blackout period, False otherwise.
+
     """
     # Convert pandas Timestamp to naive UTC datetime if needed
     if isinstance(check_timestamp, pd.Timestamp):

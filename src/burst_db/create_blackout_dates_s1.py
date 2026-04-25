@@ -320,6 +320,7 @@ def add_global_blackout_period(
     ...     "2025-04-29T19:40:10",
     ...     "2025-05-01T19:33:34"
     ... )
+
     """
     # Load existing blackout dates
     with open(blackout_file) as f:
