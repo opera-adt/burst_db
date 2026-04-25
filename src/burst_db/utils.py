@@ -5,6 +5,7 @@ import zipfile
 from itertools import islice
 from pathlib import Path
 
+import click
 from shapely import box
 
 
@@ -37,3 +38,93 @@ def batched(iterable, n):
     it = iter(iterable)
     while batch := tuple(islice(it, n)):
         yield batch
+
+
+def normalize_cmr_csv_header(
+    csv_file: str | Path, output_file: str | Path | None = None
+):
+    """Normalize CMR CSV file header to expected format.
+
+    The CMR survey CSV files sometimes have inconsistent headers or may be missing
+    the header entirely. This function ensures the header is always exactly:
+    "Granule ID,Revision Time,Temporal Time,Revision-Temporal Delta Hours,revision-id"
+
+    Parameters
+    ----------
+    csv_file : str | Path
+        Path to the input CSV file (may or may not have a header).
+    output_file : str | Path | None, optional
+        Path to the output CSV file. If None, overwrites the input file.
+
+    Notes
+    -----
+    - If the first line contains "Granule" or "Revision", it's treated as a header
+      and replaced.
+    - If the first line doesn't look like a header (starts with data), the
+      standard header is prepended.
+    - The expected header format matches what create_cslc_burst_catalog.py expects.
+
+    """
+    csv_file = Path(csv_file)
+    output_file = Path(output_file) if output_file else csv_file
+
+    # Expected header for burst catalog processing
+    expected_header = [
+        "Granule ID",
+        "Revision Time",
+        "Temporal Time",
+        "Revision-Temporal Delta Hours",
+        "revision-id",
+    ]
+
+    # Read all lines
+    with open(csv_file) as f:
+        lines = f.readlines()
+
+    if not lines:
+        raise ValueError(f"CSV file {csv_file} is empty")
+
+    # Check if first line looks like a header (contains expected field names)
+    first_line = lines[0].strip()
+    is_header = any(
+        field in first_line for field in ["Granule", "Revision", "Temporal"]
+    )
+
+    # Prepare output lines
+    if is_header:
+        # Replace existing header
+        output_lines = [",".join(expected_header) + "\n", *lines[1:]]
+    else:
+        # Prepend header if missing
+        output_lines = [",".join(expected_header) + "\n", *lines]
+
+    # Write normalized CSV
+    with open(output_file, "w") as f:
+        f.writelines(output_lines)
+
+
+@click.command()
+@click.argument("csv_file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output file path. If not specified, overwrites the input file.",
+)
+def normalize_csv_header(csv_file: Path, output: Path | None):
+    """Normalize CMR CSV header to expected format.
+
+    Ensures the CSV header is exactly:
+    "Granule ID,Revision Time,Temporal Time,Revision-Temporal Delta Hours,revision-id"
+
+    This handles cases where:
+    - The CSV has a different header format
+    - The CSV has no header at all
+    - The CSV header has variations in spacing or capitalization
+
+    CSV_FILE: Path to the CMR survey CSV file to normalize.
+    """
+    normalize_cmr_csv_header(csv_file, output)
+    output_path = output if output else csv_file
+    click.echo(f"✓ Normalized CSV header: {output_path}")

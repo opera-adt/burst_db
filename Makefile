@@ -39,9 +39,10 @@ all: opera-s1-disp-$(VERSION).gpkg $(CONSISTENT_BURSTS) $(REFERENCE_DATES)
 opera-s1-disp-$(VERSION).gpkg:
 	opera-db create
 
-# Extract CMR survey
+# Extract CMR survey and normalize header
 $(CMR_SURVEY_CSV): $(CMR_SURVEY_TAR)
 	tar -xzf $< -O > $@
+	opera-db normalize-csv-header $@
 
 # Create blackout dates from snow analysis, then add global blackout period
 BLACKOUT_FILE := opera-disp-s1-blackout-dates-$(DATE).json
