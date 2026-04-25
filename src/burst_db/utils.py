@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import json
 import zipfile
 from itertools import islice
@@ -41,7 +40,9 @@ def batched(iterable, n):
         yield batch
 
 
-def normalize_cmr_csv_header(csv_file: str | Path, output_file: str | Path | None = None):
+def normalize_cmr_csv_header(
+    csv_file: str | Path, output_file: str | Path | None = None
+):
     """Normalize CMR CSV file header to expected format.
 
     The CMR survey CSV files sometimes have inconsistent headers or may be missing
@@ -62,6 +63,7 @@ def normalize_cmr_csv_header(csv_file: str | Path, output_file: str | Path | Non
     - If the first line doesn't look like a header (starts with data), the
       standard header is prepended.
     - The expected header format matches what create_cslc_burst_catalog.py expects.
+
     """
     csv_file = Path(csv_file)
     output_file = Path(output_file) if output_file else csv_file
@@ -91,10 +93,10 @@ def normalize_cmr_csv_header(csv_file: str | Path, output_file: str | Path | Non
     # Prepare output lines
     if is_header:
         # Replace existing header
-        output_lines = [",".join(expected_header) + "\n"] + lines[1:]
+        output_lines = [",".join(expected_header) + "\n", *lines[1:]]
     else:
         # Prepend header if missing
-        output_lines = [",".join(expected_header) + "\n"] + lines
+        output_lines = [",".join(expected_header) + "\n", *lines]
 
     # Write normalized CSV
     with open(output_file, "w") as f:
