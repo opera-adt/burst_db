@@ -9,16 +9,14 @@ import pandas as pd
 import unzip_http
 from shapely.geometry import MultiPolygon
 
-USGS_LAND_URL = (
-    "https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-shp-2.3.7.zip"
-)
+USGS_LAND_URL = "https://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip"
 GREENLAND_URL = "https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/world-administrative-boundaries/exports/geojson"
 
 
 def get_usgs_land(outpath=None):
     """Download the USGS land data.
 
-    From URL: https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-shp-2.3.7.zip
+    From URL: https://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip
     """
     outpath = Path(outpath) if outpath else Path.cwd()
     rzf = unzip_http.RemoteZipFile(USGS_LAND_URL)

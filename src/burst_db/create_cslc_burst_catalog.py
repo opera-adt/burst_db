@@ -187,6 +187,73 @@ def _date_is_excluded(
     return False
 
 
+def _timestamp_is_excluded(
+    frame_id: int | str,
+    check_timestamp: pd.Timestamp,
+    blackout_periods: dict[str, list[list[str]]],
+    global_blackout: dict | None = None,
+) -> bool:
+    """Check if a timestamp falls within any blackout period for a frame.
+
+    This function respects the time component of blackout periods, unlike
+    _date_is_excluded which only compares dates.
+
+    Parameters
+    ----------
+    frame_id : int | str
+        Frame ID to check.
+    check_timestamp : pd.Timestamp
+        Timestamp to check against blackout periods.
+    blackout_periods : dict[str, list[list[str]]]
+        Dictionary mapping frame IDs to lists of [start, end] timestamp pairs.
+    global_blackout : dict | None, optional
+        Global blackout period dict with 'start' and 'end' keys.
+        If provided, applies to all frames.
+
+    Returns
+    -------
+    bool
+        True if timestamp falls within a blackout period, False otherwise.
+
+    """
+    # Convert pandas Timestamp to naive UTC datetime if needed
+    if isinstance(check_timestamp, pd.Timestamp):
+        check_dt = check_timestamp.to_pydatetime()
+        if check_dt.tzinfo is not None:
+            check_dt = check_dt.replace(tzinfo=None)
+    else:
+        check_dt = check_timestamp
+
+    # Check global blackout first (applies to all frames)
+    if global_blackout:
+        start_dt = datetime.fromisoformat(
+            global_blackout["start"].replace("Z", "+00:00")
+        )
+        end_dt = datetime.fromisoformat(global_blackout["end"].replace("Z", "+00:00"))
+        if start_dt.tzinfo is not None:
+            start_dt = start_dt.replace(tzinfo=None)
+        if end_dt.tzinfo is not None:
+            end_dt = end_dt.replace(tzinfo=None)
+
+        if start_dt <= check_dt <= end_dt:
+            return True
+
+    # Check frame-specific blackouts
+    if blackout_periods.get(str(frame_id)):
+        for start_str, end_str in blackout_periods[str(frame_id)]:
+            start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+            end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+            # Remove timezone info to compare as naive UTC
+            if start_dt.tzinfo is not None:
+                start_dt = start_dt.replace(tzinfo=None)
+            if end_dt.tzinfo is not None:
+                end_dt = end_dt.replace(tzinfo=None)
+
+            if start_dt <= check_dt <= end_dt:
+                return True
+    return False
+
+
 def make_consistent_burst_json(
     db_file: Path | str,
     date_range: str | None = None,
@@ -220,9 +287,13 @@ def make_consistent_burst_json(
         input_files = {}
     df_bursts_all = fetch_bursts(db_file=db_file)
     if blackout_file:
-        blackout_periods = json.loads(Path(blackout_file).read_text())["blackout_dates"]
+        blackout_data = json.loads(Path(blackout_file).read_text())
+        blackout_periods = blackout_data["blackout_dates"]
+        # Extract global blackout if present
+        global_blackout = blackout_data.get("metadata", {}).get("global_blackout_added")
     else:
         blackout_periods = {}
+        global_blackout = None
 
     frame_ids = df_bursts_all.frame_id.unique()
     frame_id_date_to_sensing_time = {
@@ -236,7 +307,10 @@ def make_consistent_burst_json(
             .dt.floor("s").items()
         )
         # Filter away sensing times that fall in the blackout period
-        if not _date_is_excluded(str(frame_id), sensing_date, blackout_periods)
+        # Use timestamp comparison to respect specific times in blackout periods
+        if not _timestamp_is_excluded(
+            str(frame_id), sensing_time, blackout_periods, global_blackout
+        )
     }
     with tempfile.TemporaryDirectory() as tmpdir:
         out_dir = Path(tmpdir)
