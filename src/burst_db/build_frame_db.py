@@ -60,15 +60,16 @@ def _setup_spatialite_con(con: sqlite3.Connection):
     con.execute("SELECT EnableGpkgAmphibiousMode();")
 
 
-def make_burst_triplets(df_burst: pd.DataFrame) -> pd.DataFrame:
-    """Make a burst triplets dataframe, aggregating IW1,2,3 from the burst dataframe."""
+def make_burst_swath_aggregate(df_burst: pd.DataFrame) -> pd.DataFrame:
+    """Make a burst swath aggreate dataframe,
+    aggregating IW1,2,3 or EW1,2,3,4,5 from the burst dataframe."""
 
     def join_track_numbers(orbits: list) -> str:
         orbits = list(set(orbits))
         orbits_str = list(map(str, orbits))
         return ",".join(orbits_str)
 
-    df_burst_triplet_temp = df_burst.dissolve(
+    df_burst_swaths_temp = df_burst.dissolve(
         by="burst_id",
         aggfunc={
             "OGC_FID": ["min", "max"],
@@ -77,8 +78,8 @@ def make_burst_triplets(df_burst: pd.DataFrame) -> pd.DataFrame:
         },
         as_index=False,
     )
-    df_burst_triplet = df_burst_triplet_temp.reset_index(drop=True)
-    df_burst_triplet.columns = [
+    df_burst_swaths = df_burst_swaths_temp.reset_index(drop=True)
+    df_burst_swaths.columns = [
         "burst_id",
         "geom",
         "OGC_FID_min",
@@ -86,7 +87,7 @@ def make_burst_triplets(df_burst: pd.DataFrame) -> pd.DataFrame:
         "relative_orbit_numbers",
         "look_direction",
     ]
-    return df_burst_triplet
+    return df_burst_swaths
 
 
 def get_intersect_indicator(gdf: gpd.GeoDataFrame, test_geom: GeometryType.POLYGON):
@@ -575,11 +576,21 @@ def create_metadata_table(db_path, metadata):
 
 @click.command(context_settings={"show_default": True})
 @click.option(
+    "--sensor-mode",
+    type=click.Choice(["IW", "EW"]),
+    default="IW",
+    show_default=True,
+    help="Sentinel-1 acquisition sensor mode.",
+)
+@click.option(
     "--esa-db-path",
-    default="burst_map_IW_000001_375887.sqlite3",
+    default=None,
     help=(
         "Path to the ESA sqlite burst database to convert, downloaded from"
-        f" {ESA_DB_URL}. Will be downloaded if not exists."
+        f" {ESA_DB_URL}. Will be downloaded if not exists. If None, default"
+        " is set based on the --sensor-mode value. "
+        " IW -> burst_map_IW_000001_375887.sqlite3"
+        " EW -> burst_map_EW_000001_341235.sqlite3"
     ),
 )
 @click.option(
@@ -619,6 +630,7 @@ def create_metadata_table(db_path, metadata):
     help="A buffer (in degrees) to indicate that a frame is near land.",
 )
 def create(
+    sensor_mode,
     esa_db_path,
     snap,
     margin,
@@ -632,10 +644,18 @@ def create(
     """Generate the OPERA frame database for Sentinel-1 data."""
     t0 = time.time()
 
+    # if the desired output esa_db_path is not provided, set
+    # based on the selected sensor mode
+    if esa_db_path is None:
+        esa_db_path = {
+            "IW": "burst_map_IW_000001_375887.sqlite3",
+            "EW": "burst_map_EW_000001_341235.sqlite3",
+        }[sensor_mode]
+
     # Read ESA's Burst Data
     if not Path(esa_db_path).exists():
         logger.info(f"Downloading {ESA_DB_URL} to {esa_db_path}...")
-        get_esa_burst_db(esa_db_path)
+        get_esa_burst_db(esa_db_path, sensor_mode.upper())
 
     logger.info("Loading burst data...")
     sql = "SELECT * FROM burst_id_map"
@@ -663,15 +683,18 @@ def create(
     with sqlite3.connect(outfile) as con:
         con.execute("ALTER TABLE burst_id_map RENAME COLUMN fid TO OGC_FID;")
 
-    logger.info("Aggregating burst triplets (grouping IW1,2,3 geometries together)")
-    df_burst_triplet = make_burst_triplets(df_burst)
+    logger.info(
+        "Aggregating burst swaths (grouping IW1,2,3 or "
+        "EW1,2,3,4,5 geometries together)"
+    )
+    df_burst_swaths = make_burst_swath_aggregate(df_burst)
 
     # Get the land polygon to intersect
-    logger.info("Indicating which burst triplets are near land...")
+    logger.info("Indicating which burst swath aggregates are near land...")
     df_land = get_land_df(land_buffer_deg)
     land_geom = df_land.geometry
 
-    is_in_land = get_intersect_indicator(df_burst_triplet, land_geom)
+    is_in_land = get_intersect_indicator(df_burst_swaths, land_geom)
 
     # Create frames and JOIN tables
     # Make the JOIN table first
@@ -682,6 +705,7 @@ def create(
         min_frame=min_frame,
         max_frame=max_frame,
         optimize_land=optimize_land,
+        n_subswaths={"IW":3, "EW":5}[sensor_mode],
     )
     make_frame_to_burst_table(outfile, df_frame_to_burst_id)
 
