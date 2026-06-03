@@ -14,5 +14,8 @@ dependencies:
 - shapely
 - tqdm
 - utm
+- libspatialite
+- gdal
 - pip:
   - unzip-http
+  - rich

@@ -8,3 +8,4 @@ shapely
 tqdm
 unzip-http
 utm
+rich
