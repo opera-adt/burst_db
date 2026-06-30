@@ -31,6 +31,7 @@ def create_frame_to_burst_mapping(
     min_frame: int,
     max_frame: int,
     optimize_land: bool = False,
+    n_subswaths: int = 3,  # 3 for IW, 5 for EW
 ) -> pd.DataFrame:
     """Create the JOIN table between frames_number and burst_id."""
     if not optimize_land:
@@ -50,7 +51,10 @@ def create_frame_to_burst_mapping(
         cumulative_slice_idxs, start=1
     ):
         for burst_id in range(start_idx + 1, end_idx + 1):
-            for ogc_fid in range(1 + 3 * (burst_id - 1), 4 + 3 * (burst_id - 1)):
+            for ogc_fid in range(
+                1 + n_subswaths * (burst_id - 1),
+                1 + n_subswaths * burst_id,  # exclusive end
+            ):
                 frame_ogc_fid_tuples.append((frame_id, ogc_fid, is_land))
 
     df_frame_to_burst_id = pd.DataFrame(

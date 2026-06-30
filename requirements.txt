@@ -4,6 +4,7 @@ geopandas
 numpy
 opera-utils
 pandas
+rich
 shapely
 tqdm
 unzip-http
