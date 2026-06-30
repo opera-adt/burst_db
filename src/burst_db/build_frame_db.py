@@ -61,8 +61,10 @@ def _setup_spatialite_con(con: sqlite3.Connection):
 
 
 def make_burst_swath_aggregate(df_burst: pd.DataFrame) -> pd.DataFrame:
-    """Make a burst swath aggreate dataframe,
-    aggregating IW1,2,3 or EW1,2,3,4,5 from the burst dataframe."""
+    """Make a burst swath aggreate dataframe,.
+
+    aggregating IW1,2,3 or EW1,2,3,4,5 from the burst dataframe.
+    """
 
     def join_track_numbers(orbits: list) -> str:
         orbits = list(set(orbits))
@@ -705,7 +707,7 @@ def create(
         min_frame=min_frame,
         max_frame=max_frame,
         optimize_land=optimize_land,
-        n_subswaths={"IW":3, "EW":5}[sensor_mode],
+        n_subswaths={"IW": 3, "EW": 5}[sensor_mode],
     )
     make_frame_to_burst_table(outfile, df_frame_to_burst_id)
 
