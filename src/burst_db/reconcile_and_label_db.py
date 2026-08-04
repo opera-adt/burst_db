@@ -108,10 +108,14 @@ def format_sensing_time(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%S")
 
 
-def find_frames_with_different_bursts(
+def find_frames_needing_reconciliation(
     old_data: dict[str, Any], new_data: dict[str, Any]
 ) -> list[str]:
-    """Find frame IDs where burst IDs differ between old and new databases.
+    """Find frame IDs where burst IDs or sensing time dates differ.
+
+    A frame needs reconciliation if either its burst IDs or its sensing
+    time dates differ between the old and new databases, since
+    `reconcile_frame` can independently correct each of those.
 
     Parameters
     ----------
@@ -123,7 +127,7 @@ def find_frames_with_different_bursts(
     Returns
     -------
     list[str]
-        List of frame IDs with different burst IDs.
+        List of frame IDs needing reconciliation.
 
     """
     different_frames = []
@@ -136,7 +140,10 @@ def find_frames_with_different_bursts(
         old_bursts = set(old_frame_data.get("burst_id_list", []))
         new_bursts = set(new_data[frame_id].get("burst_id_list", []))
 
-        if old_bursts != new_bursts:
+        old_dates = {get_date_only(t) for t in old_frame_data.get("sensing_time_list", [])}
+        new_dates = {get_date_only(t) for t in new_data[frame_id].get("sensing_time_list", [])}
+
+        if old_bursts != new_bursts or old_dates != new_dates:
             different_frames.append(frame_id)
 
     return different_frames
@@ -213,7 +220,7 @@ def reconcile_databases(
 ) -> dict[str, Any]:
     """Reconcile old and new burst databases.
 
-    For frames with different burst IDs:
+    For frames where burst IDs or sensing time dates differ:
     - If new has more burst IDs AND no overlap in sensing times (complete restart),
       keep new data as-is (just label it)
     - Otherwise, if new has more burst IDs, remove extras (use old's burst IDs)
@@ -248,8 +255,8 @@ def reconcile_databases(
     reconciled_data = {}
 
     # Find frames that need reconciliation
-    different_frames = find_frames_with_different_bursts(old_data, new_data)
-    print(f"Found {len(different_frames)} frames with different burst IDs")
+    different_frames = find_frames_needing_reconciliation(old_data, new_data)
+    print(f"Found {len(different_frames)} frames needing reconciliation")
 
     skipped_count = 0
     reconciled_count = 0
@@ -556,6 +563,10 @@ Examples:
     python reconcile_and_label_db.py --new-db input.json --output output.json \\
            --no-reconcile
 
+    # Only reconcile, without adding processing mode labels
+    python reconcile_and_label_db.py --old-db old.json --new-db new.json \\
+           --output output.json --no-label
+
     # Customize batch size and gap threshold
     python reconcile_and_label_db.py --old-db old.json --new-db new.json \\
         --output output.json \\
@@ -584,6 +595,11 @@ Examples:
         "--no-reconcile",
         action="store_true",
         help="Skip reconciliation step, only add processing modes.",
+    )
+    parser.add_argument(
+        "--no-label",
+        action="store_true",
+        help="Skip processing mode labeling step, only reconcile.",
     )
     parser.add_argument(
         "--batch-size",
@@ -665,66 +681,72 @@ Examples:
             save_database(updated_input, args.new_db)
             print(f"  Updated input database: {args.new_db}")
 
-    print("\n" + "-" * 60)
-    print("Task 2: Adding processing mode labels")
-    print("-" * 60)
-    print(f"  Batch size: {args.batch_size}")
-    print(f"  Gap threshold: {args.gap_threshold} years")
-
-    result_db = add_processing_modes(
-        working_db,
-        batch_size=args.batch_size,
-        gap_threshold_years=args.gap_threshold,
-    )
-
-    # Print summary
-    summary = get_processing_mode_summary(result_db)
-    print("\nProcessing mode summary:")
-    print(f"  Total frames: {summary['total_frames']}")
-    print(f"  Total sensing times: {summary['total_sensing_times']}")
-    print(f"  Historical: {summary['historical_count']}")
-    print(f"  Forward: {summary['forward_count']}")
-    print(f"  No run: {summary['no_run_count']}")
-    print(
-        f"  Frames with temporal gaps (>= {args.gap_threshold} years): "
-        f"{summary['frames_with_temporal_gaps']}"
-    )
-    print(f"  Max group number: {summary['max_group_number']}")
-
-    # Verbose output
-    if args.verbose:
+    if args.no_label:
         print("\n" + "-" * 60)
-        print("Detailed frame information:")
+        print("Skipping processing mode labeling (--no-label specified)")
         print("-" * 60)
-        data = get_data_section(result_db)
-        for frame_id, frame_data in list(data.items())[:5]:  # Show first 5
-            # sensing_time_list is now a dict {sensing_time: label}
-            sensing_time_dict = frame_data.get("sensing_time_list", {})
-            times = list(sensing_time_dict.keys())
-            modes = list(sensing_time_dict.values())
-            groups = identify_time_groups(times)
+        result_db = working_db
+    else:
+        print("\n" + "-" * 60)
+        print("Task 2: Adding processing mode labels")
+        print("-" * 60)
+        print(f"  Batch size: {args.batch_size}")
+        print(f"  Gap threshold: {args.gap_threshold} years")
 
-            # Count historical, forward, and no_run (with any suffix)
-            hist_count = sum(1 for m in modes if m.startswith("historical"))
-            fwd_count = sum(1 for m in modes if m.startswith("forward"))
-            no_run_count = sum(1 for m in modes if m.startswith("no_run"))
+        result_db = add_processing_modes(
+            working_db,
+            batch_size=args.batch_size,
+            gap_threshold_years=args.gap_threshold,
+        )
 
-            # Get unique mode labels
-            unique_modes = sorted(set(modes))
+        # Print summary
+        summary = get_processing_mode_summary(result_db)
+        print("\nProcessing mode summary:")
+        print(f"  Total frames: {summary['total_frames']}")
+        print(f"  Total sensing times: {summary['total_sensing_times']}")
+        print(f"  Historical: {summary['historical_count']}")
+        print(f"  Forward: {summary['forward_count']}")
+        print(f"  No run: {summary['no_run_count']}")
+        print(
+            f"  Frames with temporal gaps (>= {args.gap_threshold} years): "
+            f"{summary['frames_with_temporal_gaps']}"
+        )
+        print(f"  Max group number: {summary['max_group_number']}")
 
-            print(f"\n  Frame {frame_id}:")
-            print(f"    Burst IDs: {len(frame_data.get('burst_id_list', []))}")
-            print(f"    Sensing times: {len(times)}")
-            print(f"    Temporal groups: {len(groups)}")
-            print(f"    Historical: {hist_count}, \
-                      Forward: {fwd_count}, \
-                      No run: {no_run_count}")
-            print(f"    Labels: {unique_modes}")
+        # Verbose output
+        if args.verbose:
+            print("\n" + "-" * 60)
+            print("Detailed frame information:")
+            print("-" * 60)
+            data = get_data_section(result_db)
+            for frame_id, frame_data in list(data.items())[:5]:  # Show first 5
+                # sensing_time_list is now a dict {sensing_time: label}
+                sensing_time_dict = frame_data.get("sensing_time_list", {})
+                times = list(sensing_time_dict.keys())
+                modes = list(sensing_time_dict.values())
+                groups = identify_time_groups(times)
 
-            if len(groups) > 1:
-                print("    Group sizes:", [len(g) for g in groups])
-        if len(data) > 5:
-            print(f"\n  ... and {len(data) - 5} more frames")
+                # Count historical, forward, and no_run (with any suffix)
+                hist_count = sum(1 for m in modes if m.startswith("historical"))
+                fwd_count = sum(1 for m in modes if m.startswith("forward"))
+                no_run_count = sum(1 for m in modes if m.startswith("no_run"))
+
+                # Get unique mode labels
+                unique_modes = sorted(set(modes))
+
+                print(f"\n  Frame {frame_id}:")
+                print(f"    Burst IDs: {len(frame_data.get('burst_id_list', []))}")
+                print(f"    Sensing times: {len(times)}")
+                print(f"    Temporal groups: {len(groups)}")
+                print(f"    Historical: {hist_count}, \
+                          Forward: {fwd_count}, \
+                          No run: {no_run_count}")
+                print(f"    Labels: {unique_modes}")
+
+                if len(groups) > 1:
+                    print("    Group sizes:", [len(g) for g in groups])
+            if len(data) > 5:
+                print(f"\n  ... and {len(data) - 5} more frames")
 
     # Save result
     print("\n" + "-" * 60)
