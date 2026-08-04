@@ -98,6 +98,7 @@ exclude = ["scripts"]
 "tests/**" = ["D", "N", "PTH"]
 "scripts/**" = ["ALL"]
 "snow-analysis/*ipynb" = ["D101", "D102", "D103", "E501", "A004"]
+"notebooks/*ipynb" = ["D101", "D102", "D103", "E501", "A004"]
 
 [tool.ruff.lint.flake8-unused-arguments]
 # Whether to allow unused variadic arguments, like *args and **kwargs.
