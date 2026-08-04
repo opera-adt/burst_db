@@ -226,6 +226,7 @@ The `reconcile_and_label_db.py` script is a standalone tool for reconciling diff
 ### Features
 
 1. **Database Reconciliation**: Compares old and new consistent burst database JSON files and reconciles differences:
+   - A frame is reconciled if either its burst IDs or its sensing time dates differ between the old and new databases
    - If the new database has more burst IDs than the old for a frame, it uses the old burst IDs
    - If the new database is missing sensing times from the old, it adds them back
    - If there's no overlap in sensing times (indicating a complete restart after a gap), the new data is kept as-is
@@ -251,6 +252,21 @@ python src/burst_db/reconcile_and_label_db.py \
     --output output.json \
     --no-reconcile
 
+# Only reconcile, without adding processing mode labels
+python src/burst_db/reconcile_and_label_db.py \
+    --old-db old.json \
+    --new-db new.json \
+    --output output.json \
+    --no-label
+
+# Reconcile once, and get both a labeled output and a plain reconciled
+# new-db (overwritten in place) -- avoids running reconciliation twice
+python src/burst_db/reconcile_and_label_db.py \
+    --old-db old.json \
+    --new-db new.json \
+    --output with-processing-mode.json \
+    --update-input
+
 # Customize batch size and gap threshold
 python src/burst_db/reconcile_and_label_db.py \
     --old-db old.json \
@@ -269,6 +285,8 @@ python src/burst_db/reconcile_and_label_db.py \
 | `--new-db` | Path to the new burst database JSON file | Required |
 | `--output` | Path for the output JSON file | Required |
 | `--no-reconcile` | Skip reconciliation, only add labels | False |
+| `--no-label` | Skip labeling, only reconcile | False |
+| `--update-input` | Overwrite `--new-db` in place with the plain (unlabeled) reconciled data, computed from the same pass as `--output`. The write is atomic (via a temp file + rename), so a crash mid-write can't corrupt the original. | False |
 | `--batch-size` | Number of sensing times per batch | 15 |
 | `--gap-threshold` | Gap threshold in years to restart batching | 2.0 |
 | `--verbose` | Print detailed frame information | False |

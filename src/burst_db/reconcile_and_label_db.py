@@ -528,6 +528,38 @@ def get_processing_mode_summary(db: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def to_plain_db(db: dict[str, Any]) -> dict[str, Any]:
+    """Convert a (possibly labeled) database to plain form.
+
+    `sensing_time_list` is converted back to a list if it's a dict of
+    {sensing_time: label}, dropping the labels.
+
+    Parameters
+    ----------
+    db : dict
+        Burst database, with or without processing mode labels.
+
+    Returns
+    -------
+    dict
+        Database with `sensing_time_list` as a plain list in every frame.
+
+    """
+    plain_db = {}
+    if "metadata" in db:
+        plain_db["metadata"] = db["metadata"]
+    plain_db["data"] = {}
+    for frame_id, frame_data in get_data_section(db).items():
+        sensing_times = frame_data.get("sensing_time_list", [])
+        if isinstance(sensing_times, dict):
+            sensing_times = list(sensing_times.keys())
+        plain_db["data"][frame_id] = {
+            "burst_id_list": frame_data.get("burst_id_list", []),
+            "sensing_time_list": sensing_times,
+        }
+    return plain_db
+
+
 def save_database(db: dict[str, Any], filepath: str | Path) -> None:
     """Save a burst database to JSON file.
 
@@ -539,8 +571,14 @@ def save_database(db: dict[str, Any], filepath: str | Path) -> None:
         Output file path.
 
     """
-    with open(filepath, "w") as f:
+    filepath = Path(filepath)
+    # Write to a temp file in the same directory, then atomically replace
+    # the target so a crash mid-write can't leave a truncated/corrupted
+    # file in place of (potentially) the original input.
+    tmp_path = filepath.with_suffix(filepath.suffix + ".tmp")
+    with open(tmp_path, "w") as f:
         json.dump(db, f, indent=2, default=str)
+    tmp_path.replace(filepath)
     print(f"Saved database to {filepath}")
 
 
@@ -566,6 +604,11 @@ Examples:
     # Only reconcile, without adding processing mode labels
     python reconcile_and_label_db.py --old-db old.json --new-db new.json \\
            --output output.json --no-label
+
+    # Reconcile once, get both a labeled output and a plain reconciled
+    # new-db (overwritten in place)
+    python reconcile_and_label_db.py --old-db old.json --new-db new.json \\
+           --output with-processing-mode.json --update-input
 
     # Customize batch size and gap threshold
     python reconcile_and_label_db.py --old-db old.json --new-db new.json \\
@@ -663,22 +706,7 @@ Examples:
             print("\n" + "-" * 60)
             print("Updating input database with reconciled data")
             print("-" * 60)
-            # Create updated version preserving original metadata, only updating data
-            updated_input = {}
-            if "metadata" in new_db:
-                updated_input["metadata"] = new_db["metadata"]
-            updated_input["data"] = {}
-            working_data = get_data_section(working_db)
-            for frame_id, frame_data in working_data.items():
-                # Convert sensing_time_list back to a list if it's a dict
-                sensing_times = frame_data.get("sensing_time_list", [])
-                if isinstance(sensing_times, dict):
-                    sensing_times = list(sensing_times.keys())
-                updated_input["data"][frame_id] = {
-                    "burst_id_list": frame_data.get("burst_id_list", []),
-                    "sensing_time_list": sensing_times,
-                }
-            save_database(updated_input, args.new_db)
+            save_database(to_plain_db(working_db), args.new_db)
             print(f"  Updated input database: {args.new_db}")
 
     if args.no_label:
