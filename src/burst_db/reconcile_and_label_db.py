@@ -140,8 +140,12 @@ def find_frames_needing_reconciliation(
         old_bursts = set(old_frame_data.get("burst_id_list", []))
         new_bursts = set(new_data[frame_id].get("burst_id_list", []))
 
-        old_dates = {get_date_only(t) for t in old_frame_data.get("sensing_time_list", [])}
-        new_dates = {get_date_only(t) for t in new_data[frame_id].get("sensing_time_list", [])}
+        old_dates = {
+            get_date_only(t) for t in old_frame_data.get("sensing_time_list", [])
+        }
+        new_dates = {
+            get_date_only(t) for t in new_data[frame_id].get("sensing_time_list", [])
+        }
 
         if old_bursts != new_bursts or old_dates != new_dates:
             different_frames.append(frame_id)
@@ -273,7 +277,7 @@ def reconcile_databases(
                 skipped_count += 1
                 print(
                     f"  Frame {frame_id}: kept as-is (no overlap, new burst IDs - "
-                    f"likely restart after gap)"
+                    "likely restart after gap)"
                 )
             else:
                 reconciled_count += 1
@@ -648,8 +652,10 @@ Examples:
         "--batch-size",
         type=int,
         default=15,
-        help="Number of sensing times per batch for processing mode assignment. "
-        "Default: 15",
+        help=(
+            "Number of sensing times per batch for processing mode assignment. "
+            "Default: 15"
+        ),
     )
     parser.add_argument(
         "--gap-threshold",
@@ -666,9 +672,11 @@ Examples:
     parser.add_argument(
         "--update-input",
         action="store_true",
-        help="Update the input (new) database file with reconciled burst IDs and "
-        "sensing times. This saves the corrections back to the original file "
-        "before processing mode labels are added.",
+        help=(
+            "Update the input (new) database file with reconciled burst IDs and "
+            "sensing times. This saves the corrections back to the original file "
+            "before processing mode labels are added."
+        ),
     )
 
     args = parser.parse_args()
@@ -766,9 +774,11 @@ Examples:
                 print(f"    Burst IDs: {len(frame_data.get('burst_id_list', []))}")
                 print(f"    Sensing times: {len(times)}")
                 print(f"    Temporal groups: {len(groups)}")
-                print(f"    Historical: {hist_count}, \
-                          Forward: {fwd_count}, \
-                          No run: {no_run_count}")
+                print(
+                    f"    Historical: {hist_count}, "
+                    f"Forward: {fwd_count}, "
+                    f"No run: {no_run_count}"
+                )
                 print(f"    Labels: {unique_modes}")
 
                 if len(groups) > 1:
